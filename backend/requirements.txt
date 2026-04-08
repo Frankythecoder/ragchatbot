@@ -1,0 +1,6 @@
+django>=4.2,<5.0
+djangorestframework>=3.14
+djangorestframework-simplejwt>=5.3
+openai>=1.0
+django-cors-headers>=4.3
+python-dotenv>=1.0

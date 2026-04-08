@@ -1,0 +1,26 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("electronAPI", {
+  // Auth
+  login: (email, password) => ipcRenderer.invoke("auth:login", email, password),
+  register: (username, email, password) =>
+    ipcRenderer.invoke("auth:register", username, email, password),
+  navigateToChat: () => ipcRenderer.invoke("auth:navigate-chat"),
+  storeTokens: (tokens) => ipcRenderer.invoke("auth:store-tokens", tokens),
+  logout: () => ipcRenderer.invoke("auth:logout"),
+
+  // Threads
+  getThreads: () => ipcRenderer.invoke("threads:get-all"),
+  createThread: () => ipcRenderer.invoke("threads:create"),
+  getThread: (threadId) => ipcRenderer.invoke("threads:get", threadId),
+  renameThread: (threadId, title) =>
+    ipcRenderer.invoke("threads:rename", threadId, title),
+  deleteThread: (threadId) => ipcRenderer.invoke("threads:delete", threadId),
+
+  // Files
+  pickFiles: () => ipcRenderer.invoke("files:pick"),
+
+  // Chat
+  sendMessage: (threadId, message, files) =>
+    ipcRenderer.invoke("chat:send", threadId, message, files),
+});
