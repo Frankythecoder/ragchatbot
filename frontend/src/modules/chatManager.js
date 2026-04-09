@@ -405,11 +405,16 @@
       if (response.sources && response.sources.length > 0) {
         const sourceDiv = document.createElement("div");
         sourceDiv.className = "source-attribution";
-        sourceDiv.innerHTML =
-          "<strong>Sources:</strong> " +
-          response.sources
-            .map((s) => `<span class="source-tag">${s}</span>`)
-            .join("");
+        const label = document.createElement("strong");
+        label.textContent = "Sources:";
+        sourceDiv.appendChild(label);
+        sourceDiv.appendChild(document.createTextNode(" "));
+        response.sources.forEach((s) => {
+          const tag = document.createElement("span");
+          tag.className = "source-tag";
+          tag.textContent = s;
+          sourceDiv.appendChild(tag);
+        });
         messageDiv.appendChild(sourceDiv);
       }
 

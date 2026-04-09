@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 from django.contrib.auth.models import User
 from django.conf import settings
 from rest_framework import status
@@ -327,8 +330,6 @@ def upload_document(request):
             {"detail": "Only PDF and TXT files are supported."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
-    import tempfile, os
 
     suffix = ".pdf" if filename.endswith(".pdf") else ".txt"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
