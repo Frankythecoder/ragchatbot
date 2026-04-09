@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   pickFiles: () => ipcRenderer.invoke("files:pick"),
 
   // Chat
-  sendMessage: (threadId, message, files) =>
-    ipcRenderer.invoke("chat:send", threadId, message, files),
+  sendMessage: (threadId, message, files, mode) =>
+    ipcRenderer.invoke("chat:send", threadId, message, files, mode),
+
+  // RAG
+  uploadDocument: (filePath) => ipcRenderer.invoke("rag:upload", filePath),
 });

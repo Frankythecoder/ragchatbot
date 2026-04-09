@@ -159,7 +159,7 @@ class ApiService {
   /**
    * Send a message to a thread. Returns AI response + token usage.
    */
-  async sendMessage(threadId, message, accessToken, files = []) {
+  async sendMessage(threadId, message, accessToken, files = [], mode = "normal") {
     try {
       const res = await fetch(`${BACKEND_URL}/api/threads/${threadId}/chat/`, {
         method: "POST",
@@ -167,7 +167,7 @@ class ApiService {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ message, files: files || [] }),
+        body: JSON.stringify({ message, files: files || [], mode }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
@@ -177,7 +177,36 @@ class ApiService {
         message: `Could not reach the backend. Make sure the Django server is running.\n\nError: ${error.message}`,
         tokens: null,
         thread_title: null,
+        sources: [],
       };
+    }
+  }
+
+  async uploadDocument(filePath, accessToken) {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const filename = path.basename(filePath);
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const formData = new FormData();
+    formData.append("file", new Blob([fileBuffer]), filename);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/upload-document/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || `HTTP ${res.status}`);
+      }
+      return await res.json();
+    } catch (error) {
+      console.error("ApiService.uploadDocument error:", error);
+      return { success: false, message: error.message };
     }
   }
 }

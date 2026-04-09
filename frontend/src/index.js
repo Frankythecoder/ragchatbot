@@ -140,19 +140,30 @@ app.whenReady().then(() => {
   });
 
   // ---- Chat handler ----
-  ipcMain.handle("chat:send", async (_event, threadId, message, files) => {
+  ipcMain.handle("chat:send", async (_event, threadId, message, files, mode) => {
     try {
       return await apiService.sendMessage(
         threadId,
         message,
         tokenStore.accessToken,
-        files
+        files,
+        mode
       );
     } catch (error) {
       return {
         message: "I'm sorry, I encountered an error processing your request.",
         tokens: null,
+        sources: [],
       };
+    }
+  });
+
+  // ---- RAG handler ----
+  ipcMain.handle("rag:upload", async (_event, filePath) => {
+    try {
+      return await apiService.uploadDocument(filePath, tokenStore.accessToken);
+    } catch (error) {
+      return { success: false, message: error.message };
     }
   });
 
