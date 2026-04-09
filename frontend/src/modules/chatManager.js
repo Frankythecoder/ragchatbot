@@ -11,6 +11,7 @@
     chatSearch;
 
   let stagedFiles = [];
+  let selectedMode = "normal";
 
   // ---- Thinking indicator ----
 
@@ -384,7 +385,8 @@
       const response = await window.electronAPI.sendMessage(
         currentThread.id,
         message,
-        filesForBackend
+        filesForBackend,
+        selectedMode
       );
 
       removeThinking();
@@ -398,6 +400,18 @@
       chatContainer.appendChild(messageDiv);
 
       await simulateStreaming(contentDiv, response.message);
+
+      // Show source attribution if RAG mode returned sources
+      if (response.sources && response.sources.length > 0) {
+        const sourceDiv = document.createElement("div");
+        sourceDiv.className = "source-attribution";
+        sourceDiv.innerHTML =
+          "<strong>Sources:</strong> " +
+          response.sources
+            .map((s) => `<span class="source-tag">${s}</span>`)
+            .join("");
+        messageDiv.appendChild(sourceDiv);
+      }
 
       currentThread.messages.push({ isUser: false, content: response.message });
 
@@ -469,7 +483,28 @@
       const files = await window.electronAPI.pickFiles();
       if (files && files.length > 0) {
         addStagedFiles(files);
+
+        // If in RAG mode, also index PDF/TXT files
+        if (selectedMode === "rag") {
+          for (const file of files) {
+            if (file.ext === "pdf" || file.ext === "txt") {
+              const result = await window.electronAPI.uploadDocument(file.path);
+              if (result && result.success) {
+                console.log(`Indexed ${file.name}: ${result.chunks_indexed} chunks`);
+              }
+            }
+          }
+        }
       }
+    });
+
+    // RAG toggle
+    const ragToggle = document.getElementById("rag-toggle");
+    const modeLabel = document.getElementById("mode-label");
+    ragToggle.addEventListener("change", () => {
+      selectedMode = ragToggle.checked ? "rag" : "normal";
+      modeLabel.textContent = ragToggle.checked ? "RAG" : "Normal";
+      modeLabel.classList.toggle("rag-active", ragToggle.checked);
     });
 
     document.getElementById("logout-btn").addEventListener("click", async () => {
