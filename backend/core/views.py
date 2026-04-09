@@ -188,6 +188,7 @@ def send_message(request, thread_id):
 
     content = request.data.get("message", "").strip()
     files = request.data.get("files", []) or []
+    mode = request.data.get("mode", "normal")
 
     if not content and not files:
         return Response(
@@ -215,9 +216,27 @@ def send_message(request, thread_id):
     if len(all_messages) > max_msgs:
         all_messages = all_messages[-max_msgs:]
 
-    conversation = [
-        {"role": "system", "content": "You are a helpful AI assistant."}
-    ]
+    # Build system prompt — RAG or normal
+    sources = []
+    if mode == "rag" and content:
+        results = retrieve(request.user.id, content)
+        if results:
+            context_text = "\n\n---\n\n".join(r["text"] for r in results)
+            sources = list(dict.fromkeys(r["filename"] for r in results))
+            system_content = (
+                "Answer ONLY using the context below. "
+                "If the answer is not found in the context, say 'I don't know.'\n\n"
+                f"Context:\n{context_text}"
+            )
+        else:
+            system_content = (
+                "No documents have been indexed yet. "
+                "Tell the user to upload documents first for RAG mode."
+            )
+    else:
+        system_content = "You are a helpful AI assistant."
+
+    conversation = [{"role": "system", "content": system_content}]
 
     # Previous messages as plain text
     for msg in all_messages[:-1]:
@@ -282,6 +301,7 @@ def send_message(request, thread_id):
             "message": ai_content,
             "tokens": tokens_used,
             "thread_title": thread.title,
+            "sources": sources,
         }
     )
 
