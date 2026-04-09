@@ -401,7 +401,25 @@
 
       await simulateStreaming(contentDiv, response.message);
 
-      // Show source attribution if RAG mode returned sources
+      // Show retrieved chunks and source attribution if RAG mode
+      if (response.retrieved_chunks && response.retrieved_chunks.length > 0) {
+        const chunksDiv = document.createElement("div");
+        chunksDiv.className = "retrieved-chunks";
+        const chunksLabel = document.createElement("strong");
+        chunksLabel.textContent = "Retrieved Context:";
+        chunksDiv.appendChild(chunksLabel);
+        const chunksList = document.createElement("ul");
+        chunksList.className = "chunks-list";
+        response.retrieved_chunks.forEach((chunk) => {
+          const li = document.createElement("li");
+          const truncated = chunk.length > 200 ? chunk.slice(0, 200) + "..." : chunk;
+          li.textContent = `"${truncated}"`;
+          chunksList.appendChild(li);
+        });
+        chunksDiv.appendChild(chunksList);
+        messageDiv.appendChild(chunksDiv);
+      }
+
       if (response.sources && response.sources.length > 0) {
         const sourceDiv = document.createElement("div");
         sourceDiv.className = "source-attribution";

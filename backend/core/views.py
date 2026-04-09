@@ -221,14 +221,18 @@ def send_message(request, thread_id):
 
     # Build system prompt — RAG or normal
     sources = []
+    retrieved_chunks = []
     if mode == "rag" and content:
         results = retrieve(request.user.id, content)
         if results:
             context_text = "\n\n---\n\n".join(r["text"] for r in results)
             sources = list(dict.fromkeys(r["filename"] for r in results))
+            retrieved_chunks = [r["text"] for r in results]
             system_content = (
-                "Answer ONLY using the context below. "
-                "If the answer is not found in the context, say 'I don't know.'\n\n"
+                "Answer ONLY using the provided context.\n"
+                "If the answer is not in the context, say \"I don't know.\"\n"
+                "Do NOT use prior knowledge.\n"
+                "Do NOT speculate or infer beyond what the context explicitly states.\n\n"
                 f"Context:\n{context_text}"
             )
         else:
@@ -305,6 +309,7 @@ def send_message(request, thread_id):
             "tokens": tokens_used,
             "thread_title": thread.title,
             "sources": sources,
+            "retrieved_chunks": retrieved_chunks,
         }
     )
 

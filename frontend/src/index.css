@@ -1008,3 +1008,34 @@ body.custom-theme .input-footer {
   font-size: 0.75rem;
   color: var(--text-main);
 }
+
+/* ========== Retrieved Chunks ========== */
+.retrieved-chunks {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  color: #8e8ea0;
+}
+
+.retrieved-chunks strong {
+  color: var(--accent-color);
+}
+
+.chunks-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+}
+
+.chunks-list li {
+  background: var(--pill-bg);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-main);
+  line-height: 1.4;
+  opacity: 0.85;
+}
