@@ -7,4 +7,5 @@ urlpatterns = [
     path(
         "threads/<int:thread_id>/chat/", views.send_message, name="send-message"
     ),
+    path("upload-document/", views.upload_document, name="upload-document"),
 ]

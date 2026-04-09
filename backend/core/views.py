@@ -13,6 +13,7 @@ from .serializers import (
     ChatThreadDetailSerializer,
     MessageSerializer,
 )
+from .rag import extract_text, index_document, retrieve
 
 client = None
 
@@ -283,3 +284,51 @@ def send_message(request, thread_id):
             "thread_title": thread.title,
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Document Upload (RAG)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def upload_document(request):
+    file = request.FILES.get("file")
+    if not file:
+        return Response(
+            {"detail": "No file provided."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    filename = file.name.lower()
+    if not (filename.endswith(".pdf") or filename.endswith(".txt")):
+        return Response(
+            {"detail": "Only PDF and TXT files are supported."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    import tempfile, os
+
+    suffix = ".pdf" if filename.endswith(".pdf") else ".txt"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        for chunk in file.chunks():
+            tmp.write(chunk)
+        tmp_path = tmp.name
+
+    try:
+        text = extract_text(tmp_path)
+        if not text.strip():
+            return Response(
+                {"detail": "Could not extract text from file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        chunks_added = index_document(request.user.id, file.name, text)
+    finally:
+        os.unlink(tmp_path)
+
+    return Response({
+        "success": True,
+        "filename": file.name,
+        "chunks_indexed": chunks_added,
+    })
