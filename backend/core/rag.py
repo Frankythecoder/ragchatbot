@@ -201,7 +201,30 @@ def retrieve(user_id, query, top_k=None):
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
+    # Diversity: ensure representation from every document
+    doc_best = {}
+    for score, idx in scored:
+        doc = metadata[idx]["filename"]
+        if doc not in doc_best:
+            doc_best[doc] = (score, idx)
+
+    selected = set()
     results = []
-    for _, idx in scored[:top_k]:
-        results.append(metadata[idx])
-    return results
+
+    # First pass: top chunk from each document
+    for score, idx in doc_best.values():
+        if len(results) >= top_k:
+            break
+        results.append((score, idx))
+        selected.add(idx)
+
+    # Second pass: fill remaining slots with best overall
+    for score, idx in scored:
+        if len(results) >= top_k:
+            break
+        if idx not in selected:
+            results.append((score, idx))
+            selected.add(idx)
+
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [metadata[idx] for _, idx in results]

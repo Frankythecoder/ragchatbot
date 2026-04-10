@@ -225,17 +225,24 @@ def send_message(request, thread_id):
     if mode == "rag" and content:
         results = retrieve(request.user.id, content)
         if results:
-            context_text = "\n\n---\n\n".join(r["text"] for r in results)
             sources = list(dict.fromkeys(r["filename"] for r in results))
             retrieved_chunks = [r["text"] for r in results]
+
+            # Label each chunk with its source document
+            labeled = []
+            for r in results:
+                doc_name = os.path.basename(r["filename"])
+                labeled.append(f"[Document: {doc_name}]\n{r['text']}")
+            context_text = "\n\n---\n\n".join(labeled)
 
             # RAG: simple system prompt + context embedded in user message
             conversation = [
                 {
                     "role": "system",
                     "content": "You are a helpful research assistant. "
-                    "Answer questions based on document excerpts provided by the user. "
+                    "Answer questions using ALL the document excerpts provided by the user. "
                     "Include direct quotes from the excerpts in quotation marks, "
+                    "reference which document each quote comes from, "
                     "then explain. Do not use outside knowledge.",
                 },
                 {
@@ -243,10 +250,10 @@ def send_message(request, thread_id):
                     "content": (
                         f"Here are excerpts from my uploaded documents:\n\n"
                         f"{context_text}\n\n"
-                        f"Based on the above excerpts, answer this question:\n"
+                        f"Based on ALL the above excerpts, answer this question:\n"
                         f"{content}\n\n"
-                        f"Include relevant direct quotes from the excerpts, "
-                        f"then explain what they mean."
+                        f"Include relevant direct quotes from each document "
+                        f"(mention the document name), then explain what they mean."
                     ),
                 },
             ]
