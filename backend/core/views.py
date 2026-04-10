@@ -229,10 +229,11 @@ def send_message(request, thread_id):
             sources = list(dict.fromkeys(r["filename"] for r in results))
             retrieved_chunks = [r["text"] for r in results]
             system_content = (
-                "Answer ONLY using the provided context.\n"
-                "If the answer is not in the context, say \"I don't know.\"\n"
-                "Do NOT use prior knowledge.\n"
-                "Do NOT speculate or infer beyond what the context explicitly states.\n\n"
+                "You are a helpful assistant that answers questions based on the provided context.\n"
+                "Use ONLY the information in the context below to answer.\n"
+                "You may summarize, paraphrase, and synthesize information from the context.\n"
+                "If the context does not contain enough information to answer, say \"I don't know.\"\n"
+                "Do NOT use outside knowledge that is not present in the context.\n\n"
                 f"Context:\n{context_text}"
             )
         else:

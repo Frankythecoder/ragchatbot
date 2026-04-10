@@ -27,15 +27,32 @@ def extract_text(file_path):
 
 
 def chunk_text(text, chunk_size=None, overlap=None):
-    """Split text into overlapping chunks."""
+    """Split text into overlapping chunks at sentence boundaries."""
     chunk_size = chunk_size or settings.RAG_CHUNK_SIZE
     overlap = overlap or settings.RAG_CHUNK_OVERLAP
+
+    # Split into sentences first (period/question/exclamation followed by space or newline)
+    import re
+    sentences = re.split(r'(?<=[.!?])\s+|\n\n+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+
     chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
+    current_chunk = ""
+
+    for sentence in sentences:
+        # If adding this sentence exceeds chunk_size and we already have content, finalize chunk
+        if current_chunk and len(current_chunk) + len(sentence) + 1 > chunk_size:
+            chunks.append(current_chunk)
+            # Overlap: keep the tail of the current chunk
+            words = current_chunk.split()
+            overlap_text = " ".join(words[-overlap // 5:]) if len(words) > overlap // 5 else current_chunk
+            current_chunk = overlap_text + " " + sentence
+        else:
+            current_chunk = (current_chunk + " " + sentence).strip() if current_chunk else sentence
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
     return chunks
 
 
