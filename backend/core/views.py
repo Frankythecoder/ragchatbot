@@ -219,7 +219,7 @@ def send_message(request, thread_id):
     if len(all_messages) > max_msgs:
         all_messages = all_messages[-max_msgs:]
 
-    # Build system prompt — RAG or normal
+    # Build conversation
     sources = []
     retrieved_chunks = []
     if mode == "rag" and content:
@@ -228,70 +228,81 @@ def send_message(request, thread_id):
             context_text = "\n\n---\n\n".join(r["text"] for r in results)
             sources = list(dict.fromkeys(r["filename"] for r in results))
             retrieved_chunks = [r["text"] for r in results]
-            system_content = (
-                "You are a helpful research assistant. "
-                "The user has uploaded documents and is asking questions about them. "
-                "Below are relevant excerpts retrieved from those documents.\n\n"
-                "You MUST answer the user's question based on these excerpts. "
-                "Do NOT refuse to answer. Do NOT say \"I don't know\" unless the excerpts "
-                "are completely unrelated to the question.\n\n"
-                "When responding:\n"
-                "- Include direct quotes from the excerpts where possible (in quotation marks).\n"
-                "- Then explain and analyze the quoted content.\n"
-                "- If excerpts contain partial or fragmented information (e.g. from PDF extraction), "
-                "piece together the meaning from what is available.\n"
-                "- Do NOT use knowledge from outside these excerpts.\n\n"
-                f"Excerpts:\n{context_text}"
-            )
+
+            # RAG: simple system prompt + context embedded in user message
+            conversation = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful research assistant. "
+                    "Answer questions based on document excerpts provided by the user. "
+                    "Include direct quotes from the excerpts in quotation marks, "
+                    "then explain. Do not use outside knowledge.",
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Here are excerpts from my uploaded documents:\n\n"
+                        f"{context_text}\n\n"
+                        f"Based on the above excerpts, answer this question:\n"
+                        f"{content}\n\n"
+                        f"Include relevant direct quotes from the excerpts, "
+                        f"then explain what they mean."
+                    ),
+                },
+            ]
         else:
-            system_content = (
-                "No documents have been indexed yet. "
-                "Tell the user to upload documents first for RAG mode."
-            )
+            conversation = [
+                {"role": "system", "content": "You are a helpful AI assistant."},
+                {
+                    "role": "user",
+                    "content": "No documents have been indexed yet. "
+                    "Please tell me to upload documents first for RAG mode.",
+                },
+            ]
     else:
-        system_content = "You are a helpful AI assistant."
-
-    conversation = [{"role": "system", "content": system_content}]
-
-    # Previous messages as plain text (skip in RAG mode — each query
-    # should be answered purely from retrieved context, not influenced
-    # by prior "I don't know" responses or unrelated conversation)
-    if mode != "rag":
+        # Normal mode: standard conversation with history
+        conversation = [
+            {"role": "system", "content": "You are a helpful AI assistant."}
+        ]
+        all_messages = list(thread.messages.order_by("timestamp"))
+        max_msgs = settings.MAX_HISTORY_MESSAGES
+        if len(all_messages) > max_msgs:
+            all_messages = all_messages[-max_msgs:]
         for msg in all_messages[:-1]:
             role = "user" if msg.sender == "user" else "assistant"
             conversation.append({"role": role, "content": msg.content})
 
-    # Current user message — may include file content for the LLM
-    if files:
-        user_parts = []
-        if content:
-            user_parts.append({"type": "text", "text": content})
-        for f in files:
-            if f.get("type") == "image" and f.get("dataUrl"):
-                user_parts.append(
-                    {"type": "image_url", "image_url": {"url": f["dataUrl"]}}
-                )
-            elif f.get("textContent"):
-                user_parts.append(
-                    {
-                        "type": "text",
-                        "text": (
-                            f"--- File: {f['name']} ---\n"
-                            f"{f['textContent']}\n"
-                            f"--- End of {f['name']} ---"
-                        ),
-                    }
-                )
-            else:
-                user_parts.append(
-                    {
-                        "type": "text",
-                        "text": f"[Attached file: {f['name']} ({f.get('type', 'unknown')} file)]",
-                    }
-                )
-        conversation.append({"role": "user", "content": user_parts})
-    else:
-        conversation.append({"role": "user", "content": content})
+        # Current user message — may include file content for the LLM
+        if files:
+            user_parts = []
+            if content:
+                user_parts.append({"type": "text", "text": content})
+            for f in files:
+                if f.get("type") == "image" and f.get("dataUrl"):
+                    user_parts.append(
+                        {"type": "image_url", "image_url": {"url": f["dataUrl"]}}
+                    )
+                elif f.get("textContent"):
+                    user_parts.append(
+                        {
+                            "type": "text",
+                            "text": (
+                                f"--- File: {f['name']} ---\n"
+                                f"{f['textContent']}\n"
+                                f"--- End of {f['name']} ---"
+                            ),
+                        }
+                    )
+                else:
+                    user_parts.append(
+                        {
+                            "type": "text",
+                            "text": f"[Attached file: {f['name']} ({f.get('type', 'unknown')} file)]",
+                        }
+                    )
+            conversation.append({"role": "user", "content": user_parts})
+        else:
+            conversation.append({"role": "user", "content": content})
 
     # Debug: print what we're sending to OpenAI
     print(f"\n{'='*60}")
