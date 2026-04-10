@@ -147,7 +147,7 @@ app.whenReady().then(() => {
     if (result.canceled || result.filePaths.length === 0) return [];
 
     const folderPath = result.filePaths[0];
-    const ragExts = [".pdf", ".txt"];
+    const ragExts = [".pdf", ".txt", ".docx", ".pptx", ".xlsx"];
     const found = [];
 
     function walk(dir) {

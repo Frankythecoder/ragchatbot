@@ -18,13 +18,45 @@ def get_embedding_model():
 
 
 def extract_text(file_path):
-    """Extract text from a PDF or TXT file."""
-    if file_path.lower().endswith(".pdf"):
+    """Extract text from PDF, DOCX, PPTX, XLSX, or TXT files."""
+    lower = file_path.lower()
+
+    if lower.endswith(".pdf"):
         reader = PdfReader(file_path)
         return "\n".join(page.extract_text() or "" for page in reader.pages)
-    else:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
+
+    if lower.endswith(".docx"):
+        from docx import Document
+        doc = Document(file_path)
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+    if lower.endswith(".pptx"):
+        from pptx import Presentation
+        prs = Presentation(file_path)
+        texts = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        if para.text.strip():
+                            texts.append(para.text)
+        return "\n".join(texts)
+
+    if lower.endswith(".xlsx"):
+        from openpyxl import load_workbook
+        wb = load_workbook(file_path, read_only=True, data_only=True)
+        rows = []
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows(values_only=True):
+                cells = [str(c) for c in row if c is not None]
+                if cells:
+                    rows.append("\t".join(cells))
+        wb.close()
+        return "\n".join(rows)
+
+    # Fallback: plain text
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read()
 
 
 def chunk_text(text, chunk_size=None, overlap=None):

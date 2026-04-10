@@ -365,13 +365,14 @@ def upload_document(request):
         )
 
     filename = file.name.lower()
-    if not (filename.endswith(".pdf") or filename.endswith(".txt")):
+    supported = (".pdf", ".txt", ".docx", ".pptx", ".xlsx")
+    if not any(filename.endswith(ext) for ext in supported):
         return Response(
-            {"detail": "Only PDF and TXT files are supported."},
+            {"detail": "Supported formats: PDF, TXT, DOCX, PPTX, XLSX."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    suffix = ".pdf" if filename.endswith(".pdf") else ".txt"
+    suffix = os.path.splitext(filename)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         for chunk in file.chunks():
             tmp.write(chunk)

@@ -565,8 +565,9 @@
         addStagedFiles(files);
       } else {
         // RAG mode: index PDF/TXT into knowledge base (persistent)
-        const indexable = files.filter((f) => f.ext === "pdf" || f.ext === "txt");
-        const nonIndexable = files.filter((f) => f.ext !== "pdf" && f.ext !== "txt");
+        const ragExts = ["pdf", "txt", "docx", "pptx", "xlsx"];
+        const indexable = files.filter((f) => ragExts.includes(f.ext));
+        const nonIndexable = files.filter((f) => !ragExts.includes(f.ext));
 
         if (nonIndexable.length > 0) {
           // Non-indexable files still get staged for inline injection
@@ -623,7 +624,7 @@
       modeLabel.textContent = ragToggle.checked ? "RAG" : "Normal";
       modeLabel.classList.toggle("rag-active", ragToggle.checked);
       uploadBtn.title = ragToggle.checked
-        ? "Upload documents to RAG knowledge base (PDF, TXT)"
+        ? "Upload documents to RAG knowledge base (PDF, DOCX, PPTX, XLSX, TXT)"
         : "Attach files to message";
       folderBtn.style.display = ragToggle.checked ? "" : "none";
     });
