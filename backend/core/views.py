@@ -229,12 +229,15 @@ def send_message(request, thread_id):
             sources = list(dict.fromkeys(r["filename"] for r in results))
             retrieved_chunks = [r["text"] for r in results]
             system_content = (
-                "You are a helpful assistant that answers questions based on the provided context.\n"
-                "Use ONLY the information in the context below to answer.\n"
-                "You may summarize, paraphrase, and synthesize information from the context.\n"
-                "If the context does not contain enough information to answer, say \"I don't know.\"\n"
-                "Do NOT use outside knowledge that is not present in the context.\n\n"
-                f"Context:\n{context_text}"
+                "You are a helpful research assistant. "
+                "Below are excerpts retrieved from documents uploaded by the user.\n\n"
+                "INSTRUCTIONS:\n"
+                "- Answer the user's question using the information in these excerpts.\n"
+                "- You may summarize, paraphrase, and synthesize across multiple excerpts.\n"
+                "- If the excerpts contain partial information, provide the best answer you can from what is available.\n"
+                "- Only say \"I don't know\" if the excerpts contain absolutely NO relevant information.\n"
+                "- Do NOT use knowledge from outside these excerpts.\n\n"
+                f"Document Excerpts:\n{context_text}"
             )
         else:
             system_content = (
@@ -246,10 +249,13 @@ def send_message(request, thread_id):
 
     conversation = [{"role": "system", "content": system_content}]
 
-    # Previous messages as plain text
-    for msg in all_messages[:-1]:
-        role = "user" if msg.sender == "user" else "assistant"
-        conversation.append({"role": role, "content": msg.content})
+    # Previous messages as plain text (skip in RAG mode — each query
+    # should be answered purely from retrieved context, not influenced
+    # by prior "I don't know" responses or unrelated conversation)
+    if mode != "rag":
+        for msg in all_messages[:-1]:
+            role = "user" if msg.sender == "user" else "assistant"
+            conversation.append({"role": role, "content": msg.content})
 
     # Current user message — may include file content for the LLM
     if files:
