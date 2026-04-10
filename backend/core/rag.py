@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import numpy as np
 import faiss
 from pypdf import PdfReader
@@ -31,8 +32,13 @@ def chunk_text(text, chunk_size=None, overlap=None):
     chunk_size = chunk_size or settings.RAG_CHUNK_SIZE
     overlap = overlap or settings.RAG_CHUNK_OVERLAP
 
-    # Split into sentences first (period/question/exclamation followed by space or newline)
-    import re
+    # Normalize PDF line breaks: single newlines (column wrapping) → spaces,
+    # but preserve double+ newlines as paragraph separators
+    text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+    # Collapse runs of whitespace (except paragraph breaks)
+    text = re.sub(r'[^\S\n]+', ' ', text)
+
+    # Split into sentences (period/question/exclamation followed by space, or paragraph break)
     sentences = re.split(r'(?<=[.!?])\s+|\n\n+', text)
     sentences = [s.strip() for s in sentences if s.strip()]
 
@@ -40,10 +46,8 @@ def chunk_text(text, chunk_size=None, overlap=None):
     current_chunk = ""
 
     for sentence in sentences:
-        # If adding this sentence exceeds chunk_size and we already have content, finalize chunk
         if current_chunk and len(current_chunk) + len(sentence) + 1 > chunk_size:
             chunks.append(current_chunk)
-            # Overlap: keep the tail of the current chunk
             words = current_chunk.split()
             overlap_text = " ".join(words[-overlap // 5:]) if len(words) > overlap // 5 else current_chunk
             current_chunk = overlap_text + " " + sentence
@@ -125,7 +129,7 @@ def index_document(user_id, filename, text):
 
 
 def retrieve(user_id, query, top_k=None):
-    """Embed the query and retrieve the top-k most relevant chunks."""
+    """Hybrid retrieval: semantic similarity + keyword re-ranking."""
     top_k = top_k or settings.RAG_TOP_K
     index, metadata = _load_index(user_id)
 
@@ -136,10 +140,36 @@ def retrieve(user_id, query, top_k=None):
     query_vec = model.encode([query], normalize_embeddings=True)
     query_vec = np.array(query_vec, dtype="float32")
 
-    distances, indices = index.search(query_vec, min(top_k, index.ntotal))
+    # Fetch extra candidates for re-ranking
+    n_candidates = min(top_k * 3, index.ntotal)
+    distances, indices = index.search(query_vec, n_candidates)
+
+    # Extract meaningful query terms for keyword boosting
+    stop_words = {
+        "the", "a", "an", "is", "are", "was", "were", "what", "which",
+        "who", "how", "does", "did", "and", "or", "but", "in", "on",
+        "at", "to", "for", "of", "with", "by", "from", "this", "that",
+        "it", "its", "about", "talk", "talks", "can", "you", "me",
+    }
+    query_terms = [
+        w for w in re.split(r'\W+', query.lower())
+        if len(w) > 2 and w not in stop_words
+    ]
+
+    scored = []
+    for rank, idx in enumerate(indices[0]):
+        if idx < 0 or idx >= len(metadata):
+            continue
+        chunk_lower = metadata[idx]["text"].lower()
+        keyword_hits = sum(1 for t in query_terms if t in chunk_lower)
+        semantic_score = 1.0 / (1.0 + float(distances[0][rank]))
+        keyword_score = keyword_hits / max(len(query_terms), 1)
+        combined = semantic_score + keyword_score * 0.5
+        scored.append((combined, idx))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
 
     results = []
-    for i in indices[0]:
-        if 0 <= i < len(metadata):
-            results.append(metadata[i])
+    for _, idx in scored[:top_k]:
+        results.append(metadata[idx])
     return results
