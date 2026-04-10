@@ -190,6 +190,7 @@ class ApiService {
     const fileBuffer = fs.readFileSync(filePath);
     const formData = new FormData();
     formData.append("file", new Blob([fileBuffer]), filename);
+    formData.append("file_path", filePath);
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/upload-document/`, {

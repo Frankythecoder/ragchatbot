@@ -381,7 +381,8 @@ def upload_document(request):
                 {"detail": "Could not extract text from file."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        chunks_added = index_document(request.user.id, file.name, text)
+        file_path = request.data.get("file_path", file.name)
+        chunks_added = index_document(request.user.id, file_path, text)
     finally:
         os.unlink(tmp_path)
 

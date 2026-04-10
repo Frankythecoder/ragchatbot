@@ -103,8 +103,8 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 MAX_HISTORY_MESSAGES = int(os.environ.get("MAX_HISTORY_MESSAGES", "20"))
 
 # --- RAG ---
-RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "1000"))
-RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "200"))
-RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
+RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "2000"))
+RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "300"))
+RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "8"))
 RAG_EMBEDDING_MODEL = os.environ.get("RAG_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 RAG_INDEX_DIR = os.path.join(BASE_DIR, "rag_indices")

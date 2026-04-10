@@ -100,6 +100,21 @@ def index_document(user_id, filename, text):
     embeddings = np.array(embeddings, dtype="float32")
 
     index, metadata = _load_index(user_id)
+
+    # Remove old chunks for this document so re-uploads replace, not duplicate
+    keep = [i for i, m in enumerate(metadata) if m["filename"] != filename]
+    if len(keep) < len(metadata):
+        if keep:
+            kept_vecs = np.array(
+                [index.reconstruct(i) for i in keep], dtype="float32"
+            )
+            new_index = faiss.IndexFlatL2(kept_vecs.shape[1])
+            new_index.add(kept_vecs)
+        else:
+            new_index = faiss.IndexFlatL2(embeddings.shape[1])
+        metadata = [metadata[i] for i in keep]
+        index = new_index
+
     index.add(embeddings)
 
     for chunk in chunks:
