@@ -230,21 +230,18 @@ def send_message(request, thread_id):
             retrieved_chunks = [r["text"] for r in results]
             system_content = (
                 "You are a helpful research assistant. "
-                "Below are excerpts retrieved from documents uploaded by the user.\n\n"
-                "INSTRUCTIONS:\n"
-                "- Answer the user's question using the information in these excerpts.\n"
-                "- When answering, FIRST quote the relevant passage(s) directly from the "
-                "excerpts using quotation marks, then provide your explanation and analysis.\n"
-                "- You may synthesize across multiple excerpts.\n"
-                "- If the excerpts contain partial information, provide the best answer "
-                "you can from what is available.\n"
-                "- Only say \"I don't know\" if the excerpts contain absolutely NO "
-                "relevant information.\n"
+                "The user has uploaded documents and is asking questions about them. "
+                "Below are relevant excerpts retrieved from those documents.\n\n"
+                "You MUST answer the user's question based on these excerpts. "
+                "Do NOT refuse to answer. Do NOT say \"I don't know\" unless the excerpts "
+                "are completely unrelated to the question.\n\n"
+                "When responding:\n"
+                "- Include direct quotes from the excerpts where possible (in quotation marks).\n"
+                "- Then explain and analyze the quoted content.\n"
+                "- If excerpts contain partial or fragmented information (e.g. from PDF extraction), "
+                "piece together the meaning from what is available.\n"
                 "- Do NOT use knowledge from outside these excerpts.\n\n"
-                "RESPONSE FORMAT:\n"
-                "1. Quote the relevant text from the excerpts (in quotation marks).\n"
-                "2. Explain and analyze what the quoted text means.\n\n"
-                f"Document Excerpts:\n{context_text}"
+                f"Excerpts:\n{context_text}"
             )
         else:
             system_content = (
@@ -295,6 +292,16 @@ def send_message(request, thread_id):
         conversation.append({"role": "user", "content": user_parts})
     else:
         conversation.append({"role": "user", "content": content})
+
+    # Debug: print what we're sending to OpenAI
+    print(f"\n{'='*60}")
+    print(f"MODE: {mode}")
+    print(f"MESSAGES COUNT: {len(conversation)}")
+    for i, msg in enumerate(conversation):
+        role = msg["role"]
+        text = msg["content"] if isinstance(msg["content"], str) else str(msg["content"])
+        print(f"  [{i}] {role}: {text[:200]}...")
+    print(f"{'='*60}\n")
 
     # Call OpenAI
     tokens_used = None
