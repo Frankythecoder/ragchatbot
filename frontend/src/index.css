@@ -811,6 +811,26 @@ body.custom-theme .input-footer {
   background: rgba(16, 163, 127, 0.1);
 }
 
+#upload-folder-btn {
+  background: transparent;
+  border: none;
+  color: #8e8ea0;
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+  margin-bottom: 3px;
+  margin-right: 4px;
+}
+
+#upload-folder-btn:hover {
+  color: var(--accent-color);
+  background: rgba(16, 163, 127, 0.1);
+}
+
 /* ========== File Staging Area ========== */
 .file-staging {
   display: none;

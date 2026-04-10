@@ -13,6 +13,50 @@
   let stagedFiles = [];
   let selectedMode = "normal";
 
+  // ---- RAG indexing UI ----
+
+  async function indexFilesWithProgress(files) {
+    const staging = document.getElementById("file-staging");
+    staging.style.display = "flex";
+    let totalChunks = 0;
+
+    for (const file of files) {
+      const chip = document.createElement("div");
+      chip.className = "file-chip rag-indexing";
+      const icon = document.createElement("span");
+      icon.className = "file-chip-icon";
+      icon.textContent = getFileIcon(file.type || (file.ext === "pdf" ? "pdf" : "code"));
+      chip.appendChild(icon);
+      const name = document.createElement("span");
+      name.className = "file-chip-name";
+      name.textContent = `Indexing ${file.name}...`;
+      chip.appendChild(name);
+      staging.appendChild(chip);
+
+      const result = await window.electronAPI.uploadDocument(file.path);
+      if (result && result.success) {
+        name.textContent = `${file.name} (${result.chunks_indexed} chunks)`;
+        chip.classList.remove("rag-indexing");
+        chip.classList.add("rag-indexed");
+        totalChunks += result.chunks_indexed;
+      } else {
+        name.textContent = `${file.name} - failed`;
+        chip.classList.remove("rag-indexing");
+        chip.classList.add("rag-index-error");
+      }
+    }
+
+    // Auto-clear indexed file chips after 4 seconds
+    setTimeout(() => {
+      staging.querySelectorAll(".rag-indexed, .rag-index-error").forEach((el) => el.remove());
+      if (staging.children.length === 0) {
+        staging.style.display = "none";
+      }
+    }, 4000);
+
+    return totalChunks;
+  }
+
   // ---- Thinking indicator ----
 
   function showThinking() {
@@ -520,44 +564,46 @@
           addStagedFiles(nonIndexable);
         }
 
-        if (indexable.length === 0) return;
-
-        // Show indexing progress in staging area
-        const staging = document.getElementById("file-staging");
-        staging.style.display = "flex";
-        for (const file of indexable) {
-          const chip = document.createElement("div");
-          chip.className = "file-chip rag-indexing";
-          const icon = document.createElement("span");
-          icon.className = "file-chip-icon";
-          icon.textContent = getFileIcon(file.type);
-          chip.appendChild(icon);
-          const name = document.createElement("span");
-          name.className = "file-chip-name";
-          name.textContent = `Indexing ${file.name}...`;
-          chip.appendChild(name);
-          staging.appendChild(chip);
-
-          const result = await window.electronAPI.uploadDocument(file.path);
-          if (result && result.success) {
-            name.textContent = `${file.name} (${result.chunks_indexed} chunks)`;
-            chip.classList.remove("rag-indexing");
-            chip.classList.add("rag-indexed");
-          } else {
-            name.textContent = `${file.name} - failed`;
-            chip.classList.remove("rag-indexing");
-            chip.classList.add("rag-index-error");
-          }
+        if (indexable.length > 0) {
+          await indexFilesWithProgress(indexable);
         }
-
-        // Auto-clear indexed file chips after 4 seconds
-        setTimeout(() => {
-          staging.querySelectorAll(".rag-indexed, .rag-index-error").forEach((el) => el.remove());
-          if (staging.children.length === 0) {
-            staging.style.display = "none";
-          }
-        }, 4000);
       }
+    });
+
+    // RAG folder upload
+    const folderBtn = document.getElementById("upload-folder-btn");
+    folderBtn.addEventListener("click", async () => {
+      const result = await window.electronAPI.pickFolder();
+      if (!result || !result.files || result.files.length === 0) return;
+
+      // Show folder name as a header chip, then index all files
+      const staging = document.getElementById("file-staging");
+      staging.style.display = "flex";
+      const headerChip = document.createElement("div");
+      headerChip.className = "file-chip rag-indexing";
+      const folderIcon = document.createElement("span");
+      folderIcon.className = "file-chip-icon";
+      folderIcon.textContent = "\u{1F4C1}";
+      headerChip.appendChild(folderIcon);
+      const folderName = document.createElement("span");
+      folderName.className = "file-chip-name";
+      folderName.textContent = `${result.folder}/ (${result.files.length} files)`;
+      headerChip.appendChild(folderName);
+      staging.appendChild(headerChip);
+
+      const totalChunks = await indexFilesWithProgress(result.files);
+
+      // Update header chip with final result
+      folderName.textContent = `${result.folder}/ (${result.files.length} files, ${totalChunks} chunks)`;
+      headerChip.classList.remove("rag-indexing");
+      headerChip.classList.add("rag-indexed");
+
+      setTimeout(() => {
+        headerChip.remove();
+        if (staging.children.length === 0) {
+          staging.style.display = "none";
+        }
+      }, 4000);
     });
 
     // RAG toggle
@@ -570,6 +616,7 @@
       uploadBtn.title = ragToggle.checked
         ? "Upload documents to RAG knowledge base (PDF, TXT)"
         : "Attach files to message";
+      folderBtn.style.display = ragToggle.checked ? "" : "none";
     });
 
     document.getElementById("logout-btn").addEventListener("click", async () => {

@@ -139,6 +139,45 @@ app.whenReady().then(() => {
     });
   });
 
+  // ---- RAG folder handler ----
+  ipcMain.handle("rag:pick-folder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openDirectory"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+
+    const folderPath = result.filePaths[0];
+    const ragExts = [".pdf", ".txt"];
+    const found = [];
+
+    function walk(dir) {
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (_) {
+        return;
+      }
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (ragExts.includes(ext)) {
+            found.push({
+              name: entry.name,
+              path: fullPath,
+              ext: ext.slice(1),
+            });
+          }
+        }
+      }
+    }
+
+    walk(folderPath);
+    return { folder: path.basename(folderPath), files: found };
+  });
+
   // ---- Chat handler ----
   ipcMain.handle("chat:send", async (_event, threadId, message, files, mode) => {
     try {

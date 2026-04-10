@@ -26,4 +26,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // RAG
   uploadDocument: (filePath) => ipcRenderer.invoke("rag:upload", filePath),
+  pickFolder: () => ipcRenderer.invoke("rag:pick-folder"),
 });
