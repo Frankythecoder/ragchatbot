@@ -57,6 +57,44 @@
     return totalChunks;
   }
 
+  // ---- RAG attribution rendering ----
+
+  function appendRAGAttribution(messageDiv, sources, chunks) {
+    if (chunks && chunks.length > 0) {
+      const chunksDiv = document.createElement("div");
+      chunksDiv.className = "retrieved-chunks";
+      const chunksLabel = document.createElement("strong");
+      chunksLabel.textContent = "Retrieved Context:";
+      chunksDiv.appendChild(chunksLabel);
+      const chunksList = document.createElement("ul");
+      chunksList.className = "chunks-list";
+      chunks.forEach((chunk) => {
+        const li = document.createElement("li");
+        const truncated = chunk.length > 200 ? chunk.slice(0, 200) + "..." : chunk;
+        li.textContent = `"${truncated}"`;
+        chunksList.appendChild(li);
+      });
+      chunksDiv.appendChild(chunksList);
+      messageDiv.appendChild(chunksDiv);
+    }
+
+    if (sources && sources.length > 0) {
+      const sourceDiv = document.createElement("div");
+      sourceDiv.className = "source-attribution";
+      const label = document.createElement("strong");
+      label.textContent = "Sources:";
+      sourceDiv.appendChild(label);
+      sourceDiv.appendChild(document.createTextNode(" "));
+      sources.forEach((s) => {
+        const tag = document.createElement("span");
+        tag.className = "source-tag";
+        tag.textContent = s;
+        sourceDiv.appendChild(tag);
+      });
+      messageDiv.appendChild(sourceDiv);
+    }
+  }
+
   // ---- Thinking indicator ----
 
   function showThinking() {
@@ -197,7 +235,7 @@
       currentThread.messages.push({ isUser, content });
     }
 
-    return contentDiv;
+    return messageDiv;
   }
 
   function appendTokenInfo(tokens) {
@@ -346,7 +384,10 @@
 
     thread.messages.forEach((msg) => {
       const isUser = msg.sender === "user";
-      appendMessage(isUser, msg.content, true);
+      const messageDiv = appendMessage(isUser, msg.content, true);
+      if (!isUser) {
+        appendRAGAttribution(messageDiv, msg.sources, msg.retrieved_chunks);
+      }
     });
 
     messageInput.disabled = false;
@@ -446,39 +487,7 @@
       await simulateStreaming(contentDiv, response.message);
 
       // Show retrieved chunks and source attribution if RAG mode
-      if (response.retrieved_chunks && response.retrieved_chunks.length > 0) {
-        const chunksDiv = document.createElement("div");
-        chunksDiv.className = "retrieved-chunks";
-        const chunksLabel = document.createElement("strong");
-        chunksLabel.textContent = "Retrieved Context:";
-        chunksDiv.appendChild(chunksLabel);
-        const chunksList = document.createElement("ul");
-        chunksList.className = "chunks-list";
-        response.retrieved_chunks.forEach((chunk) => {
-          const li = document.createElement("li");
-          const truncated = chunk.length > 200 ? chunk.slice(0, 200) + "..." : chunk;
-          li.textContent = `"${truncated}"`;
-          chunksList.appendChild(li);
-        });
-        chunksDiv.appendChild(chunksList);
-        messageDiv.appendChild(chunksDiv);
-      }
-
-      if (response.sources && response.sources.length > 0) {
-        const sourceDiv = document.createElement("div");
-        sourceDiv.className = "source-attribution";
-        const label = document.createElement("strong");
-        label.textContent = "Sources:";
-        sourceDiv.appendChild(label);
-        sourceDiv.appendChild(document.createTextNode(" "));
-        response.sources.forEach((s) => {
-          const tag = document.createElement("span");
-          tag.className = "source-tag";
-          tag.textContent = s;
-          sourceDiv.appendChild(tag);
-        });
-        messageDiv.appendChild(sourceDiv);
-      }
+      appendRAGAttribution(messageDiv, response.sources, response.retrieved_chunks);
 
       currentThread.messages.push({ isUser: false, content: response.message });
 

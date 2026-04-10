@@ -23,6 +23,8 @@ class Message(models.Model):
     )
     sender = models.CharField(max_length=10, choices=SENDER_CHOICES)
     content = models.TextField()
+    sources = models.JSONField(default=list, blank=True)
+    retrieved_chunks = models.JSONField(default=list, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:

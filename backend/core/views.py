@@ -332,7 +332,10 @@ def send_message(request, thread_id):
         ai_content = f"I'm sorry, I encountered an error: {str(e)}"
 
     # Save AI response
-    Message.objects.create(thread=thread, sender="ai", content=ai_content)
+    Message.objects.create(
+        thread=thread, sender="ai", content=ai_content,
+        sources=sources, retrieved_chunks=retrieved_chunks,
+    )
     thread.save()  # bumps updated_at
 
     return Response(

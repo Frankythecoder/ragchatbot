@@ -5,7 +5,7 @@ from .models import ChatThread, Message
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
-        fields = ["id", "sender", "content", "timestamp"]
+        fields = ["id", "sender", "content", "sources", "retrieved_chunks", "timestamp"]
 
 
 class ChatThreadSerializer(serializers.ModelSerializer):
