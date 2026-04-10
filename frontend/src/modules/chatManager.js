@@ -502,22 +502,61 @@
       await refreshHistorySidebar(e.target.value.toLowerCase());
     });
 
-    document.getElementById("upload-btn").addEventListener("click", async () => {
+    const uploadBtn = document.getElementById("upload-btn");
+    uploadBtn.addEventListener("click", async () => {
       const files = await window.electronAPI.pickFiles();
-      if (files && files.length > 0) {
-        addStagedFiles(files);
+      if (!files || files.length === 0) return;
 
-        // If in RAG mode, also index PDF/TXT files
-        if (selectedMode === "rag") {
-          for (const file of files) {
-            if (file.ext === "pdf" || file.ext === "txt") {
-              const result = await window.electronAPI.uploadDocument(file.path);
-              if (result && result.success) {
-                console.log(`Indexed ${file.name}: ${result.chunks_indexed} chunks`);
-              }
-            }
+      if (selectedMode === "normal") {
+        // Normal mode: stage files for inline injection into the message
+        addStagedFiles(files);
+      } else {
+        // RAG mode: index PDF/TXT into knowledge base (persistent)
+        const indexable = files.filter((f) => f.ext === "pdf" || f.ext === "txt");
+        const nonIndexable = files.filter((f) => f.ext !== "pdf" && f.ext !== "txt");
+
+        if (nonIndexable.length > 0) {
+          // Non-indexable files still get staged for inline injection
+          addStagedFiles(nonIndexable);
+        }
+
+        if (indexable.length === 0) return;
+
+        // Show indexing progress in staging area
+        const staging = document.getElementById("file-staging");
+        staging.style.display = "flex";
+        for (const file of indexable) {
+          const chip = document.createElement("div");
+          chip.className = "file-chip rag-indexing";
+          const icon = document.createElement("span");
+          icon.className = "file-chip-icon";
+          icon.textContent = getFileIcon(file.type);
+          chip.appendChild(icon);
+          const name = document.createElement("span");
+          name.className = "file-chip-name";
+          name.textContent = `Indexing ${file.name}...`;
+          chip.appendChild(name);
+          staging.appendChild(chip);
+
+          const result = await window.electronAPI.uploadDocument(file.path);
+          if (result && result.success) {
+            name.textContent = `${file.name} (${result.chunks_indexed} chunks)`;
+            chip.classList.remove("rag-indexing");
+            chip.classList.add("rag-indexed");
+          } else {
+            name.textContent = `${file.name} - failed`;
+            chip.classList.remove("rag-indexing");
+            chip.classList.add("rag-index-error");
           }
         }
+
+        // Auto-clear indexed file chips after 4 seconds
+        setTimeout(() => {
+          staging.querySelectorAll(".rag-indexed, .rag-index-error").forEach((el) => el.remove());
+          if (staging.children.length === 0) {
+            staging.style.display = "none";
+          }
+        }, 4000);
       }
     });
 
@@ -528,6 +567,9 @@
       selectedMode = ragToggle.checked ? "rag" : "normal";
       modeLabel.textContent = ragToggle.checked ? "RAG" : "Normal";
       modeLabel.classList.toggle("rag-active", ragToggle.checked);
+      uploadBtn.title = ragToggle.checked
+        ? "Upload documents to RAG knowledge base (PDF, TXT)"
+        : "Attach files to message";
     });
 
     document.getElementById("logout-btn").addEventListener("click", async () => {
