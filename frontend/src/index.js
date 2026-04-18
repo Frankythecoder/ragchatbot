@@ -6,7 +6,37 @@ const apiService = require("./services/apiService");
 let mainWindow;
 let tokenStore = { accessToken: null, refreshToken: null };
 
+// Persist tokens to disk so the user stays logged in across restarts
+const tokenFilePath = path.join(app.getPath("userData"), "auth-tokens.json");
+
+function saveTokensToDisk() {
+  try {
+    fs.writeFileSync(tokenFilePath, JSON.stringify(tokenStore), "utf-8");
+  } catch (_) {}
+}
+
+function loadTokensFromDisk() {
+  try {
+    if (fs.existsSync(tokenFilePath)) {
+      const data = JSON.parse(fs.readFileSync(tokenFilePath, "utf-8"));
+      tokenStore.accessToken = data.accessToken || null;
+      tokenStore.refreshToken = data.refreshToken || null;
+    }
+  } catch (_) {
+    tokenStore.accessToken = null;
+    tokenStore.refreshToken = null;
+  }
+}
+
+function clearTokensFromDisk() {
+  try {
+    if (fs.existsSync(tokenFilePath)) fs.unlinkSync(tokenFilePath);
+  } catch (_) {}
+}
+
 const createWindow = () => {
+  loadTokensFromDisk();
+
   mainWindow = new BrowserWindow({
     width: 900,
     height: 650,
@@ -15,7 +45,12 @@ const createWindow = () => {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, "auth.html"));
+  // Skip login if we have saved tokens
+  if (tokenStore.accessToken) {
+    mainWindow.loadFile(path.join(__dirname, "index.html"));
+  } else {
+    mainWindow.loadFile(path.join(__dirname, "auth.html"));
+  }
 
   mainWindow.webContents.on("context-menu", () => {
     Menu.buildFromTemplate([
@@ -39,6 +74,7 @@ app.whenReady().then(() => {
       if (result && result.success && result.body) {
         tokenStore.accessToken = result.body.access_token;
         tokenStore.refreshToken = result.body.refresh_token;
+        saveTokensToDisk();
       }
       return result;
     } catch (error) {
@@ -63,6 +99,7 @@ app.whenReady().then(() => {
   ipcMain.handle("auth:store-tokens", async (_event, tokens) => {
     tokenStore.accessToken = tokens.accessToken || null;
     tokenStore.refreshToken = tokens.refreshToken || null;
+    saveTokensToDisk();
     return { success: true };
   });
 
@@ -74,6 +111,7 @@ app.whenReady().then(() => {
     }
     tokenStore.accessToken = null;
     tokenStore.refreshToken = null;
+    clearTokensFromDisk();
     if (mainWindow) {
       mainWindow.loadFile(path.join(__dirname, "auth.html"));
     }
