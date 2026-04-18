@@ -387,6 +387,7 @@
       const messageDiv = appendMessage(isUser, msg.content, true);
       if (!isUser) {
         appendRAGAttribution(messageDiv, msg.sources, msg.retrieved_chunks);
+        appendTokenInfo(msg.tokens);
       }
     });
 

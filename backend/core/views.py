@@ -235,15 +235,17 @@ def send_message(request, thread_id):
                 labeled.append(f"[Document: {doc_name}]\n{r['text']}")
             context_text = "\n\n---\n\n".join(labeled)
 
-            # RAG: simple system prompt + context embedded in user message
+            # RAG: answer-focused prompt; refusal only in system msg (soft)
             conversation = [
                 {
                     "role": "system",
                     "content": "You are a helpful research assistant. "
-                    "Answer questions using ALL the document excerpts provided by the user. "
-                    "Include direct quotes from the excerpts in quotation marks, "
-                    "reference which document each quote comes from, "
-                    "then explain. Do not use outside knowledge.",
+                    "Answer questions based on the document excerpts the user provides. "
+                    "Include direct quotes in quotation marks, reference which document "
+                    "each quote comes from, then explain. Do not use outside knowledge. "
+                    "Only if the excerpts are completely unrelated to the question, "
+                    "respond with: \"I don't know. The answer to your question "
+                    "was not found in the uploaded documents.\"",
                 },
                 {
                     "role": "user",
@@ -258,8 +260,8 @@ def send_message(request, thread_id):
                 },
             ]
         else:
-            # No relevant documents found — strict RAG: refuse
-            ai_content = "I don't know. The answer to your question was not found in the uploaded documents."
+            # No documents indexed at all
+            ai_content = "I don't know. No documents have been uploaded yet."
             Message.objects.create(thread=thread, sender="ai", content=ai_content)
             thread.save()
             return Response(
@@ -343,10 +345,16 @@ def send_message(request, thread_id):
     except Exception as e:
         ai_content = f"I'm sorry, I encountered an error: {str(e)}"
 
+    # If the LLM determined the docs aren't relevant, strip sources/chunks
+    if ai_content.lower().startswith("i don't know"):
+        sources = []
+        retrieved_chunks = []
+
     # Save AI response
     Message.objects.create(
         thread=thread, sender="ai", content=ai_content,
         sources=sources, retrieved_chunks=retrieved_chunks,
+        tokens=tokens_used,
     )
     thread.save()  # bumps updated_at
 

@@ -25,6 +25,7 @@ class Message(models.Model):
     content = models.TextField()
     sources = models.JSONField(default=list, blank=True)
     retrieved_chunks = models.JSONField(default=list, blank=True)
+    tokens = models.JSONField(default=None, null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
