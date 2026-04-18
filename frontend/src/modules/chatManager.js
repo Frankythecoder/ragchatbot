@@ -384,7 +384,9 @@
 
     thread.messages.forEach((msg) => {
       const isUser = msg.sender === "user";
-      const messageDiv = appendMessage(isUser, msg.content, true);
+      const files = isUser && msg.attachments && msg.attachments.length > 0
+        ? msg.attachments : null;
+      const messageDiv = appendMessage(isUser, msg.content, true, files);
       if (!isUser) {
         appendRAGAttribution(messageDiv, msg.sources, msg.retrieved_chunks);
         appendTokenInfo(msg.tokens);

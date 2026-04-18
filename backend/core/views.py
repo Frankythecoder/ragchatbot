@@ -199,9 +199,11 @@ def send_message(request, thread_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Save user message (text only for DB)
+    # Save user message with attachment metadata
+    file_meta = [{"name": f.get("name", "file"), "type": f.get("type", "other")} for f in files]
     Message.objects.create(
-        thread=thread, sender="user", content=content or "[Files attached]"
+        thread=thread, sender="user", content=content or "[Files attached]",
+        attachments=file_meta,
     )
 
     # Auto-title on first user message
