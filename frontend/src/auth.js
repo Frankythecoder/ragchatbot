@@ -38,6 +38,17 @@
     loginForm.classList.add("active");
   });
 
+  // ---- Password visibility toggle ----
+  const pwToggle = document.getElementById("login-pw-toggle");
+  const pwInput = document.getElementById("login-password");
+  pwToggle.addEventListener("click", () => {
+    const isHidden = pwInput.type === "password";
+    pwInput.type = isHidden ? "text" : "password";
+    pwToggle.querySelector(".eye-open").style.display = isHidden ? "none" : "";
+    pwToggle.querySelector(".eye-closed").style.display = isHidden ? "" : "none";
+    pwToggle.title = isHidden ? "Hide password" : "Show password";
+  });
+
   // ---- Login ----
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();

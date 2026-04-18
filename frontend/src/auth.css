@@ -208,6 +208,37 @@ body {
     box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.2);
 }
 
+/* ------- Password toggle ------- */
+.password-wrapper {
+    position: relative;
+}
+
+.password-wrapper input {
+    width: 100%;
+    padding-right: 44px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: color 0.2s ease;
+}
+
+.password-toggle:hover {
+    color: #10a37f;
+}
+
 /* ------- Primary button ------- */
 .btn-primary {
     position: relative;
