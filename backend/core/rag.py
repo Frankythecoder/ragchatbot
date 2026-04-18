@@ -176,6 +176,13 @@ def retrieve(user_id, query, top_k=None):
     n_candidates = min(top_k * 3, index.ntotal)
     distances, indices = index.search(query_vec, n_candidates)
 
+    # Debug: print distances to calibrate threshold
+    print(f"[RAG] Best distance: {distances[0][0]:.4f}, Threshold: {settings.RAG_RELEVANCE_THRESHOLD}", flush=True)
+
+    # If the best match is too far, the query is unrelated to all documents
+    if float(distances[0][0]) > settings.RAG_RELEVANCE_THRESHOLD:
+        return []
+
     # Extract meaningful query terms for keyword boosting
     stop_words = {
         "the", "a", "an", "is", "are", "was", "were", "what", "which",

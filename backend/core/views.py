@@ -258,14 +258,19 @@ def send_message(request, thread_id):
                 },
             ]
         else:
-            conversation = [
-                {"role": "system", "content": "You are a helpful AI assistant."},
+            # No relevant documents found — strict RAG: refuse
+            ai_content = "I don't know. The answer to your question was not found in the uploaded documents."
+            Message.objects.create(thread=thread, sender="ai", content=ai_content)
+            thread.save()
+            return Response(
                 {
-                    "role": "user",
-                    "content": "No documents have been indexed yet. "
-                    "Please tell me to upload documents first for RAG mode.",
-                },
-            ]
+                    "message": ai_content,
+                    "tokens": None,
+                    "thread_title": thread.title,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                }
+            )
     else:
         # Normal mode: standard conversation with history
         conversation = [
