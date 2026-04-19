@@ -16,7 +16,13 @@ from .serializers import (
     ChatThreadDetailSerializer,
     MessageSerializer,
 )
-from .rag import extract_text, index_document, retrieve
+from .llm.rag_pipeline import (
+    extract_text,
+    index_document,
+    retrieve,
+    build_rag_conversation,
+)
+from .llm.normal_llm import build_normal_conversation
 
 client = None
 
@@ -227,40 +233,9 @@ def send_message(request, thread_id):
     if mode == "rag" and content:
         results = retrieve(request.user.id, content)
         if results:
-            sources = list(dict.fromkeys(r["filename"] for r in results))
-            retrieved_chunks = [r["text"] for r in results]
-
-            # Label each chunk with its source document
-            labeled = []
-            for r in results:
-                doc_name = os.path.basename(r["filename"])
-                labeled.append(f"[Document: {doc_name}]\n{r['text']}")
-            context_text = "\n\n---\n\n".join(labeled)
-
-            # RAG: answer-focused prompt; refusal only in system msg (soft)
-            conversation = [
-                {
-                    "role": "system",
-                    "content": "You are a helpful research assistant. "
-                    "Answer questions based on the document excerpts the user provides. "
-                    "Include direct quotes in quotation marks, reference which document "
-                    "each quote comes from, then explain. Do not use outside knowledge. "
-                    "Only if the excerpts are completely unrelated to the question, "
-                    "respond with: \"I don't know. The answer to your question "
-                    "was not found in the uploaded documents.\"",
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Here are excerpts from my uploaded documents:\n\n"
-                        f"{context_text}\n\n"
-                        f"Based on ALL the above excerpts, answer this question:\n"
-                        f"{content}\n\n"
-                        f"Include relevant direct quotes from each document "
-                        f"(mention the document name), then explain what they mean."
-                    ),
-                },
-            ]
+            conversation, sources, retrieved_chunks = build_rag_conversation(
+                content, results
+            )
         else:
             # No documents indexed at all
             ai_content = "I don't know. No documents have been uploaded yet."
@@ -277,48 +252,11 @@ def send_message(request, thread_id):
             )
     else:
         # Normal mode: standard conversation with history
-        conversation = [
-            {"role": "system", "content": "You are a helpful AI assistant."}
-        ]
         all_messages = list(thread.messages.order_by("timestamp"))
         max_msgs = settings.MAX_HISTORY_MESSAGES
         if len(all_messages) > max_msgs:
             all_messages = all_messages[-max_msgs:]
-        for msg in all_messages[:-1]:
-            role = "user" if msg.sender == "user" else "assistant"
-            conversation.append({"role": role, "content": msg.content})
-
-        # Current user message — may include file content for the LLM
-        if files:
-            user_parts = []
-            if content:
-                user_parts.append({"type": "text", "text": content})
-            for f in files:
-                if f.get("type") == "image" and f.get("dataUrl"):
-                    user_parts.append(
-                        {"type": "image_url", "image_url": {"url": f["dataUrl"]}}
-                    )
-                elif f.get("textContent"):
-                    user_parts.append(
-                        {
-                            "type": "text",
-                            "text": (
-                                f"--- File: {f['name']} ---\n"
-                                f"{f['textContent']}\n"
-                                f"--- End of {f['name']} ---"
-                            ),
-                        }
-                    )
-                else:
-                    user_parts.append(
-                        {
-                            "type": "text",
-                            "text": f"[Attached file: {f['name']} ({f.get('type', 'unknown')} file)]",
-                        }
-                    )
-            conversation.append({"role": "user", "content": user_parts})
-        else:
-            conversation.append({"role": "user", "content": content})
+        conversation = build_normal_conversation(content, files, all_messages)
 
     # Debug: print what we're sending to OpenAI
     print(f"\n{'='*60}")

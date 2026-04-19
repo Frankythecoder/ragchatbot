@@ -1,20 +1,13 @@
 import os
-import json
 import re
+
 import numpy as np
 import faiss
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 from django.conf import settings
 
-_model = None
-
-
-def get_embedding_model():
-    global _model
-    if _model is None:
-        _model = SentenceTransformer(settings.RAG_EMBEDDING_MODEL)
-    return _model
+from .embeddings import get_embedding_model
+from .vector_store import load_index, save_index
 
 
 def extract_text(file_path):
@@ -64,7 +57,7 @@ def chunk_text(text, chunk_size=None, overlap=None):
     chunk_size = chunk_size or settings.RAG_CHUNK_SIZE
     overlap = overlap or settings.RAG_CHUNK_OVERLAP
 
-    # Normalize PDF line breaks: single newlines (column wrapping) → spaces,
+    # Normalize PDF line breaks: single newlines (column wrapping) -> spaces,
     # but preserve double+ newlines as paragraph separators
     text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
     # Collapse runs of whitespace (except paragraph breaks)
@@ -92,39 +85,6 @@ def chunk_text(text, chunk_size=None, overlap=None):
     return chunks
 
 
-def _user_index_dir(user_id):
-    """Return the directory for a user's FAISS index."""
-    path = os.path.join(settings.RAG_INDEX_DIR, str(user_id))
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-def _load_index(user_id):
-    """Load a user's FAISS index and metadata. Creates new if not found."""
-    index_dir = _user_index_dir(user_id)
-    index_path = os.path.join(index_dir, "index.faiss")
-    meta_path = os.path.join(index_dir, "metadata.json")
-
-    if os.path.exists(index_path) and os.path.exists(meta_path):
-        index = faiss.read_index(index_path)
-        with open(meta_path, "r") as f:
-            metadata = json.load(f)
-    else:
-        dim = get_embedding_model().get_sentence_embedding_dimension()
-        index = faiss.IndexFlatL2(dim)
-        metadata = []
-
-    return index, metadata
-
-
-def _save_index(user_id, index, metadata):
-    """Persist a user's FAISS index and metadata to disk."""
-    index_dir = _user_index_dir(user_id)
-    faiss.write_index(index, os.path.join(index_dir, "index.faiss"))
-    with open(os.path.join(index_dir, "metadata.json"), "w") as f:
-        json.dump(metadata, f)
-
-
 def index_document(user_id, filename, text):
     """Chunk, embed, and add a document to the user's FAISS index."""
     chunks = chunk_text(text)
@@ -135,7 +95,7 @@ def index_document(user_id, filename, text):
     embeddings = model.encode(chunks, normalize_embeddings=True)
     embeddings = np.array(embeddings, dtype="float32")
 
-    index, metadata = _load_index(user_id)
+    index, metadata = load_index(user_id)
 
     # Remove old chunks for this document so re-uploads replace, not duplicate
     keep = [i for i, m in enumerate(metadata) if m["filename"] != filename]
@@ -156,14 +116,14 @@ def index_document(user_id, filename, text):
     for chunk in chunks:
         metadata.append({"filename": filename, "text": chunk})
 
-    _save_index(user_id, index, metadata)
+    save_index(user_id, index, metadata)
     return len(chunks)
 
 
 def retrieve(user_id, query, top_k=None):
     """Hybrid retrieval: semantic similarity + keyword re-ranking."""
     top_k = top_k or settings.RAG_TOP_K
-    index, metadata = _load_index(user_id)
+    index, metadata = load_index(user_id)
 
     if index.ntotal == 0:
         return []
@@ -228,3 +188,45 @@ def retrieve(user_id, query, top_k=None):
 
     results.sort(key=lambda x: x[0], reverse=True)
     return [metadata[idx] for _, idx in results]
+
+
+def build_rag_conversation(content, results):
+    """Build the RAG-mode conversation from retrieved chunks.
+
+    Returns (conversation, sources, retrieved_chunks).
+    """
+    sources = list(dict.fromkeys(r["filename"] for r in results))
+    retrieved_chunks = [r["text"] for r in results]
+
+    # Label each chunk with its source document
+    labeled = []
+    for r in results:
+        doc_name = os.path.basename(r["filename"])
+        labeled.append(f"[Document: {doc_name}]\n{r['text']}")
+    context_text = "\n\n---\n\n".join(labeled)
+
+    # RAG: answer-focused prompt; refusal only in system msg (soft)
+    conversation = [
+        {
+            "role": "system",
+            "content": "You are a helpful research assistant. "
+            "Answer questions based on the document excerpts the user provides. "
+            "Include direct quotes in quotation marks, reference which document "
+            "each quote comes from, then explain. Do not use outside knowledge. "
+            "Only if the excerpts are completely unrelated to the question, "
+            "respond with: \"I don't know. The answer to your question "
+            "was not found in the uploaded documents.\"",
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Here are excerpts from my uploaded documents:\n\n"
+                f"{context_text}\n\n"
+                f"Based on ALL the above excerpts, answer this question:\n"
+                f"{content}\n\n"
+                f"Include relevant direct quotes from each document "
+                f"(mention the document name), then explain what they mean."
+            ),
+        },
+    ]
+    return conversation, sources, retrieved_chunks
