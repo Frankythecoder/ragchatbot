@@ -1,6 +1,6 @@
 {
   "name": "simplechatbot",
-  "productName": "SimpleChatbot",
+  "productName": "Cortex",
   "version": "1.0.0",
   "description": "AI Chatbot with Django backend and Electron frontend",
   "main": "src/index.js",
