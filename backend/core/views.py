@@ -23,6 +23,7 @@ from .llm.rag_pipeline import (
     build_rag_conversation,
 )
 from .llm.normal_llm import build_normal_conversation
+from .llm.title_generator import build_title_conversation
 
 client = None
 
@@ -32,6 +33,30 @@ def get_openai_client():
     if client is None:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
     return client
+
+
+def _autotitle_thread(thread, user_content, files, ai_content):
+    """Generate and apply a ChatGPT-style short title for a thread's first
+    exchange. Falls back to a truncation-based title on any failure.
+    """
+    user_text = user_content or (files[0].get("name", "") if files else "")
+    try:
+        ai_client = get_openai_client()
+        response = ai_client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=build_title_conversation(user_text, ai_content),
+            max_tokens=24,
+        )
+        title = response.choices[0].message.content.strip()
+        title = title.strip('"').strip("'").strip()
+        if title:
+            thread.title = title[:60]
+            return
+    except Exception:
+        pass
+    # Fallback: truncation-based title
+    fallback = user_text or "New Chat"
+    thread.title = fallback[:50] + ("..." if len(fallback) > 50 else "")
 
 
 # ---------------------------------------------------------------------------
@@ -212,14 +237,10 @@ def send_message(request, thread_id):
         attachments=file_meta,
     )
 
-    # Auto-title on first user message
+    # Track first-message state; the ChatGPT-style auto-title is generated
+    # after the AI response is known, so the title reflects the conversation.
     user_msg_count = thread.messages.filter(sender="user").count()
-    if user_msg_count == 1:
-        title_src = content if content else (
-            files[0].get("name", "New Chat") if files else "New Chat"
-        )
-        thread.title = title_src[:50] + ("..." if len(title_src) > 50 else "")
-        thread.save()
+    is_first_message = user_msg_count == 1
 
     # Build conversation history for LLM (token optimization)
     all_messages = list(thread.messages.order_by("timestamp"))
@@ -239,6 +260,8 @@ def send_message(request, thread_id):
         else:
             # No documents indexed at all
             ai_content = "I don't know. No documents have been uploaded yet."
+            if is_first_message:
+                _autotitle_thread(thread, content, files, ai_content)
             Message.objects.create(thread=thread, sender="ai", content=ai_content)
             thread.save()
             return Response(
@@ -289,6 +312,10 @@ def send_message(request, thread_id):
     if ai_content.lower().startswith("i don't know"):
         sources = []
         retrieved_chunks = []
+
+    # ChatGPT-style auto-title after the first exchange
+    if is_first_message:
+        _autotitle_thread(thread, content, files, ai_content)
 
     # Save AI response
     Message.objects.create(
