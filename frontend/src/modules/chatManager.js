@@ -119,6 +119,7 @@
   }
 
   function formatFileSize(bytes) {
+    if (typeof bytes !== "number" || !isFinite(bytes)) return "";
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
@@ -466,6 +467,7 @@
       const filesForBackend = attachedFiles.map((f) => ({
         name: f.name,
         type: f.type,
+        size: typeof f.size === "number" ? f.size : null,
         dataUrl: f.dataUrl || null,
         textContent: f.textContent || null,
       }));

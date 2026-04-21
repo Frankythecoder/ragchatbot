@@ -231,7 +231,14 @@ def send_message(request, thread_id):
         )
 
     # Save user message with attachment metadata
-    file_meta = [{"name": f.get("name", "file"), "type": f.get("type", "other")} for f in files]
+    file_meta = [
+        {
+            "name": f.get("name", "file"),
+            "type": f.get("type", "other"),
+            "size": f.get("size"),
+        }
+        for f in files
+    ]
     Message.objects.create(
         thread=thread, sender="user", content=content or "[Files attached]",
         attachments=file_meta,
