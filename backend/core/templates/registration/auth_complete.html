@@ -1,0 +1,23 @@
+{% extends "registration/base_auth.html" %}
+
+{% block title %}Cortex — Signing in…{% endblock %}
+
+{% block content %}
+<h2>Signing you in…</h2>
+<p class="switch-text">One moment while we finish setting things up.</p>
+<script>
+(function () {
+    var tokens = {
+        accessToken: "{{ access_token|escapejs }}",
+        refreshToken: "{{ refresh_token|escapejs }}"
+    };
+    if (window.electronAPI && typeof window.electronAPI.storeTokens === "function") {
+        window.electronAPI.storeTokens(tokens).then(function () {
+            if (typeof window.electronAPI.navigateToChat === "function") {
+                window.electronAPI.navigateToChat();
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

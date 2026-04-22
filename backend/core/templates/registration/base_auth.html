@@ -1,0 +1,222 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>{% block title %}Cortex{% endblock %}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100%;
+            font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+
+        .bg-gradient {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e, #0f0c29);
+            background-size: 400% 400%;
+            animation: gradientShift 12s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .auth-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .auth-card {
+            width: 100%;
+            max-width: 420px;
+            padding: 40px 36px;
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .brand {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .brand-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            margin-bottom: 12px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #6c63ff, #8e2de2);
+            color: #fff;
+        }
+
+        .brand h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a29bfe, #fd79a8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tagline {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 4px;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.75);
+            margin-bottom: 6px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            color: #fff;
+            font-family: inherit;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #8e2de2;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 13px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, #6c63ff, #8e2de2);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.15s, box-shadow 0.15s;
+            margin-top: 4px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(142, 45, 226, 0.4);
+        }
+
+        .switch-text {
+            text-align: center;
+            margin-top: 18px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .switch-text a {
+            color: #a29bfe;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .switch-text a:hover {
+            text-decoration: underline;
+        }
+
+        .status-bar {
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .status-bar.error {
+            background: rgba(255, 82, 82, 0.15);
+            border: 1px solid rgba(255, 82, 82, 0.4);
+            color: #ff8a8a;
+        }
+
+        .status-bar.success {
+            background: rgba(82, 255, 168, 0.12);
+            border: 1px solid rgba(82, 255, 168, 0.35);
+            color: #7affc0;
+        }
+
+        .errorlist {
+            list-style: none;
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            background: rgba(255, 82, 82, 0.15);
+            border: 1px solid rgba(255, 82, 82, 0.4);
+            border-radius: 8px;
+            color: #ff8a8a;
+            font-size: 13px;
+        }
+
+        .helptext {
+            display: block;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.45);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .helptext ul {
+            padding-left: 18px;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24" width="32" height="32">
+                        <path fill="currentColor"
+                            d="M12,2C6.47,2 2,6.47 2,12C2,17.53 6.47,22 12,22C17.53,22 22,17.53 22,12C22,6.47 17.53,2 12,2M15.85,8.14C16.23,8.14 16.54,8.45 16.54,8.83C16.54,9.21 16.23,9.53 15.85,9.53C15.47,9.53 15.15,9.21 15.15,8.83C15.15,8.45 15.47,8.14 15.85,8.14M8.15,8.14C8.53,8.14 8.85,8.45 8.85,8.83C8.85,9.21 8.53,9.53 8.15,9.53C7.77,9.53 7.46,9.21 7.46,8.83C7.46,8.45 7.77,8.14 8.15,8.14M12,17.5C9.67,17.5 7.69,16.04 6.89,14H17.11C16.31,16.04 14.33,17.5 12,17.5Z" />
+                    </svg>
+                </div>
+                <h1>Cortex</h1>
+                <p class="tagline">Your AI-powered chat/RAG assistant</p>
+            </div>
+
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html>

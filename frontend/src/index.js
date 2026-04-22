@@ -3,6 +3,10 @@ const path = require("node:path");
 const fs = require("node:fs");
 const apiService = require("./services/apiService");
 
+const BACKEND_URL = "http://localhost:8000";
+const LOGIN_URL = `${BACKEND_URL}/accounts/login/`;
+const LOGOUT_URL = `${BACKEND_URL}/accounts/logout/`;
+
 let mainWindow;
 let tokenStore = { accessToken: null, refreshToken: null };
 
@@ -45,11 +49,11 @@ const createWindow = () => {
     },
   });
 
-  // Skip login if we have saved tokens
+  // Skip login if we have saved tokens; otherwise show Django's login page
   if (tokenStore.accessToken) {
     mainWindow.loadFile(path.join(__dirname, "index.html"));
   } else {
-    mainWindow.loadFile(path.join(__dirname, "auth.html"));
+    mainWindow.loadURL(LOGIN_URL);
   }
 
   mainWindow.webContents.on("context-menu", () => {
@@ -68,27 +72,10 @@ if (require("electron-squirrel-startup")) {
 
 app.whenReady().then(() => {
   // ---- Auth handlers ----
-  ipcMain.handle("auth:login", async (_event, email, password) => {
-    try {
-      const result = await apiService.login(email, password);
-      if (result && result.success && result.body) {
-        tokenStore.accessToken = result.body.access_token;
-        tokenStore.refreshToken = result.body.refresh_token;
-        saveTokensToDisk();
-      }
-      return result;
-    } catch (error) {
-      return { success: false, message: "Login failed. " + error.message };
-    }
-  });
-
-  ipcMain.handle("auth:register", async (_event, username, email, password) => {
-    try {
-      return await apiService.register(username, email, password);
-    } catch (error) {
-      return { success: false, message: "Registration failed. " + error.message };
-    }
-  });
+  // Login & registration are handled by Django's built-in auth views
+  // (rendered HTML pages at /accounts/login/ and /accounts/signup/).
+  // Electron only needs to receive the JWT pair after Django login and
+  // blacklist it on logout.
 
   ipcMain.handle("auth:navigate-chat", async () => {
     if (mainWindow) {
@@ -105,15 +92,17 @@ app.whenReady().then(() => {
 
   ipcMain.handle("auth:logout", async () => {
     try {
-      await apiService.logout(tokenStore.refreshToken, tokenStore.accessToken);
+      await apiService.jwtLogout(tokenStore.refreshToken, tokenStore.accessToken);
     } catch (_) {
-      // Best-effort server-side blacklist; clear local state regardless
+      // Best-effort JWT blacklist; clear local state regardless
     }
     tokenStore.accessToken = null;
     tokenStore.refreshToken = null;
     clearTokensFromDisk();
     if (mainWindow) {
-      mainWindow.loadFile(path.join(__dirname, "auth.html"));
+      // Hit Django's LogoutView so the session cookie is cleared, then
+      // LOGOUT_REDIRECT_URL sends the user back to the login page.
+      mainWindow.loadURL(LOGOUT_URL);
     }
     return { success: true };
   });

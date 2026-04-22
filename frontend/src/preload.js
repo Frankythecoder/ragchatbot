@@ -1,10 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  // Auth
-  login: (email, password) => ipcRenderer.invoke("auth:login", email, password),
-  register: (username, email, password) =>
-    ipcRenderer.invoke("auth:register", username, email, password),
+  // Auth — login & registration are served by Django's built-in auth views.
+  // Electron only handles navigation, token hand-off, and logout.
   navigateToChat: () => ipcRenderer.invoke("auth:navigate-chat"),
   storeTokens: (tokens) => ipcRenderer.invoke("auth:store-tokens", tokens),
   logout: () => ipcRenderer.invoke("auth:logout"),

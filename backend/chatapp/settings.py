@@ -79,6 +79,11 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# --- Django auth ---
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/auth-complete/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"
+
 # --- Django REST Framework ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

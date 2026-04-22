@@ -2,58 +2,13 @@ const BACKEND_URL = "http://localhost:8000";
 
 class ApiService {
   /**
-   * Register a new user.
+   * Blacklist the JWT refresh token on the backend. Sign-in and sign-up are
+   * handled by Django's built-in auth views (HTML pages), so only the
+   * JWT-side logout is exposed here.
    */
-  async register(username, email, password) {
+  async jwtLogout(refreshToken, accessToken) {
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/register/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, message: data.detail || "Registration failed" };
-      }
-      return { success: true, message: data.message || "Account created successfully" };
-    } catch (error) {
-      return { success: false, message: `Could not reach backend. ${error.message}` };
-    }
-  }
-
-  /**
-   * Login an existing user. Returns JWT tokens.
-   */
-  async login(email, password) {
-    try {
-      const res = await fetch(`${BACKEND_URL}/auth/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, message: data.detail || "Login failed" };
-      }
-      return {
-        success: true,
-        message: data.message || "Login successful",
-        body: {
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
-        },
-      };
-    } catch (error) {
-      return { success: false, message: `Could not reach backend. ${error.message}` };
-    }
-  }
-
-  /**
-   * Logout — blacklists the refresh token on the backend.
-   */
-  async logout(refreshToken, accessToken) {
-    try {
-      await fetch(`${BACKEND_URL}/auth/logout/`, {
+      await fetch(`${BACKEND_URL}/api/jwt-logout/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

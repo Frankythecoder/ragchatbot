@@ -1,11 +1,17 @@
 import os
 import tempfile
 
-from django.contrib.auth.models import User
+from django import forms
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import UserCreationForm
+from django.shortcuts import render
+from django.urls import reverse_lazy
+from django.views.generic import CreateView
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from openai import OpenAI
@@ -24,6 +30,8 @@ from .llm.rag_pipeline import (
 )
 from .llm.normal_llm import build_normal_conversation
 from .llm.title_generator import build_title_conversation
+
+User = get_user_model()
 
 client = None
 
@@ -64,84 +72,57 @@ def _autotitle_thread(thread, user_content, files, ai_content):
 # ---------------------------------------------------------------------------
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def register(request):
-    username = request.data.get("username", "").strip()
-    email = request.data.get("email", "").strip()
-    password = request.data.get("password", "")
+class SignUpForm(UserCreationForm):
+    """Django's built-in UserCreationForm extended with a required email."""
 
-    if not all([username, email, password]):
-        return Response(
-            {"detail": "All fields are required."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    email = forms.EmailField(required=True)
 
-    if len(password) < 6:
-        return Response(
-            {"detail": "Password must be at least 6 characters."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("username", "email", "password1", "password2")
 
-    if User.objects.filter(email=email).exists():
-        return Response(
-            {"detail": "Email already registered."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    def clean_email(self):
+        email = self.cleaned_data["email"]
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("Email already registered.")
+        return email
 
-    if User.objects.filter(username=username).exists():
-        return Response(
-            {"detail": "Username already taken."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    User.objects.create_user(username=username, email=email, password=password)
-    return Response(
-        {"success": True, "message": "Account created successfully!"},
-        status=status.HTTP_201_CREATED,
-    )
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email = self.cleaned_data["email"]
+        if commit:
+            user.save()
+        return user
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def login(request):
-    email = request.data.get("email", "").strip()
-    password = request.data.get("password", "")
+class SignUpView(CreateView):
+    form_class = SignUpForm
+    template_name = "registration/signup.html"
+    success_url = reverse_lazy("login")
 
-    if not email or not password:
-        return Response(
-            {"detail": "Email and password are required."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        return Response(
-            {"detail": "Invalid credentials."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
-
-    if not user.check_password(password):
-        return Response(
-            {"detail": "Invalid credentials."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
-
-    refresh = RefreshToken.for_user(user)
-    return Response(
+@login_required
+def auth_complete(request):
+    """Session-authenticated bridge that hands JWT tokens to the Electron
+    shell after Django's LoginView completes.
+    """
+    refresh = RefreshToken.for_user(request.user)
+    return render(
+        request,
+        "registration/auth_complete.html",
         {
-            "success": True,
-            "message": "Login successful",
             "access_token": str(refresh.access_token),
             "refresh_token": str(refresh),
-        }
+        },
     )
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def logout(request):
+def jwt_logout(request):
+    """Blacklist the supplied refresh token so the JWT pair can no longer be
+    used. Django session logout is handled separately by auth_views.LogoutView.
+    """
     refresh_token = request.data.get("refresh_token")
     if not refresh_token:
         return Response(
