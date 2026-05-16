@@ -33,7 +33,13 @@ services:
     plan: free
     rootDir: backend
     buildCommand: "./build.sh"
-    startCommand: "gunicorn chatapp.wsgi:application"
+    # --preload: import the app in the master process before forking, so the
+    #   heavy imports (faiss, sentence-transformers, torch) don't run inside
+    #   the request and trigger a worker timeout on cold start.
+    # --timeout 120: give a single request up to 2 minutes (free-tier disks
+    #   are slow and the embedding model takes a while to first-load).
+    # --workers 1: 512 MB RAM only fits one worker once torch is loaded.
+    startCommand: "gunicorn chatapp.wsgi:application --preload --workers 1 --timeout 120"
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true
