@@ -21,14 +21,12 @@ from .serializers import (
     ChatThreadDetailSerializer,
     MessageSerializer,
 )
-from .llm.rag_pipeline import (
-    extract_text,
-    index_document,
-    retrieve,
-    build_rag_conversation,
-)
 from .llm.normal_llm import build_normal_conversation
 from .llm.title_generator import build_title_conversation
+
+# rag_pipeline pulls in faiss + sentence-transformers + torch (~300-400 MB).
+# Imported lazily inside the RAG-only code paths so the chat UI and Normal
+# mode can boot on Render's 512 MB free tier without OOM-killing the worker.
 
 User = get_user_model()
 
@@ -208,6 +206,7 @@ def send_message(request, thread_id):
     sources = []
     retrieved_chunks = []
     if mode == "rag" and content:
+        from .llm.rag_pipeline import retrieve, build_rag_conversation
         results = retrieve(request.user.id, content)
         if results:
             conversation, sources, retrieved_chunks = build_rag_conversation(
@@ -314,6 +313,8 @@ def upload_document(request):
             {"detail": "Supported formats: PDF, TXT, DOCX, PPTX, XLSX."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    from .llm.rag_pipeline import extract_text, index_document
 
     suffix = os.path.splitext(filename)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
