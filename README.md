@@ -129,7 +129,7 @@ authenticates with the session cookie.
 **AI & RAG**
 - OpenAI Python SDK (Chat Completions, default model `gpt-4o-mini`)
 - FAISS (CPU) for approximate nearest-neighbour search
-- `sentence-transformers` (default model `all-MiniLM-L6-v2`) for embeddings
+- OpenAI Embeddings API (default model `text-embedding-3-small`, 1536-dim)
 - `pypdf`, `python-docx`, `python-pptx`, `openpyxl` for text extraction
 
 **Storage**
@@ -302,8 +302,10 @@ When you upload a document in RAG mode, Cortex:
    (`pypdf`, `python-docx`, `python-pptx`, `openpyxl`, or plain read).
 2. **Normalizes** whitespace and paragraph breaks, then splits into
    sentence-aware chunks (`RAG_CHUNK_SIZE`, overlap `RAG_CHUNK_OVERLAP`).
-3. **Embeds** each chunk with `sentence-transformers`
-   (default `all-MiniLM-L6-v2`, L2-normalized).
+3. **Embeds** each chunk via the OpenAI Embeddings API
+   (default `text-embedding-3-small`, 1536-dim, L2-normalized). This keeps
+   the worker process light enough to fit on small/free hosting tiers —
+   no local PyTorch model.
 4. **Stores** embeddings in a per-user FAISS `IndexFlatL2` under
    `RAG_INDEX_DIR/<user_id>/`, alongside a `metadata.json` that maps each
    vector back to its source filename and text. Re-uploading the same
@@ -433,7 +435,8 @@ process environment.
 | `RAG_CHUNK_SIZE`              | `2000`               | Target characters per chunk.                            |
 | `RAG_CHUNK_OVERLAP`           | `300`                | Overlap (in chars, approximated via word slicing).      |
 | `RAG_TOP_K`                   | `8`                  | Chunks surfaced to the LLM per RAG query.               |
-| `RAG_EMBEDDING_MODEL`         | `all-MiniLM-L6-v2`   | Any `sentence-transformers` model id.                   |
+| `RAG_EMBEDDING_MODEL`         | `text-embedding-3-small` | OpenAI embedding model id.                          |
+| `RAG_EMBEDDING_DIM`           | `1536`               | Vector dimension. `text-embedding-3-*` supports reducing this. |
 | `RAG_INDEX_DIR`               | `backend/rag_indices`| Where per-user FAISS indexes are written.               |
 
 ---

@@ -6,7 +6,7 @@ import faiss
 from pypdf import PdfReader
 from django.conf import settings
 
-from .embeddings import get_embedding_model
+from .embeddings import embed_texts
 from .vector_store import load_index, save_index
 
 
@@ -91,9 +91,7 @@ def index_document(user_id, filename, text):
     if not chunks:
         return 0
 
-    model = get_embedding_model()
-    embeddings = model.encode(chunks, normalize_embeddings=True)
-    embeddings = np.array(embeddings, dtype="float32")
+    embeddings = embed_texts(chunks)
 
     index, metadata = load_index(user_id)
 
@@ -128,9 +126,7 @@ def retrieve(user_id, query, top_k=None):
     if index.ntotal == 0:
         return []
 
-    model = get_embedding_model()
-    query_vec = model.encode([query], normalize_embeddings=True)
-    query_vec = np.array(query_vec, dtype="float32")
+    query_vec = embed_texts([query])
 
     # Fetch extra candidates for re-ranking
     n_candidates = min(top_k * 3, index.ntotal)
