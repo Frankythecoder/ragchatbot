@@ -90,8 +90,14 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if DATABASE_URL:
     import dj_database_url
 
+    # conn_health_checks: ping the connection before use so Neon's
+    # auto-suspended compute doesn't surface a "connection closed" error
+    # to the user after >5 min of idle.
     DATABASES["default"] = dj_database_url.parse(
-        DATABASE_URL, conn_max_age=600, ssl_require=True
+        DATABASE_URL,
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=True,
     )
 
 AUTH_PASSWORD_VALIDATORS = [
