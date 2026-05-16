@@ -1,31 +1,39 @@
-# Render blueprint for the Cortex web app.
+# Render blueprint for the Cortex web app — free-tier version.
 #
 # What this provisions:
-#   1. A Python web service running Django + Gunicorn (serves both the chat
-#      UI and the JSON API).
-#   2. A managed Postgres database. The DATABASE_URL is injected into the
-#      web service automatically.
-#   3. A persistent disk mounted at /var/data so the per-user FAISS RAG
-#      indexes survive deploys and restarts.
+#   - One free Python web service running Django + Gunicorn.
+#     (Sleeps after 15 min of inactivity, ~30–60 s cold-start.)
+#
+# What it deliberately does NOT provision (would require a paid plan):
+#   - A persistent disk for RAG indices.
+#   - A managed Postgres database.
+#
+# For the database, you have three choices — pick one:
+#   1. Free external Postgres (recommended).
+#      Sign up at https://neon.tech (or supabase.com, aiven.io) — both have
+#      a free hobby tier. Copy the connection string and paste it into the
+#      DATABASE_URL env var in the Render dashboard.
+#   2. SQLite (zero setup).
+#      Leave DATABASE_URL unset. Django falls back to db.sqlite3 inside the
+#      container. WARNING: the free tier has ephemeral storage, so every
+#      time the dyno restarts (~daily, plus after deploys, plus after
+#      cold-start from sleep) the database is wiped — accounts, chats, and
+#      RAG indices all reset. Fine for a smoke test, not for a real demo.
+#   3. Upgrade to Render's $7/mo Starter plan, uncomment the disk + database
+#      blocks below, and you get persistence with no external setup.
 #
 # What you still need to set manually in the Render dashboard:
 #   - OPENAI_API_KEY — your OpenAI key.
-#   - (Optional) OPENAI_MODEL, MAX_HISTORY_MESSAGES, and the RAG_* knobs.
-#
-# DJANGO_SECRET_KEY is generated for you by `generateValue: true`.
+#   - DATABASE_URL — if you chose option 1 above.
 
 services:
   - type: web
     name: cortex
     runtime: python
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: "./build.sh"
     startCommand: "gunicorn chatapp.wsgi:application"
-    disk:
-      name: rag-indices
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true
@@ -33,19 +41,30 @@ services:
         value: "False"
       - key: PYTHON_VERSION
         value: "3.11.9"
-      - key: RAG_INDEX_DIR
-        value: "/var/data/rag_indices"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cortex-db
-          property: connectionString
       - key: OPENAI_API_KEY
-        sync: false
+        sync: false       # set in the dashboard
       - key: OPENAI_MODEL
         value: "gpt-4o-mini"
+      - key: DATABASE_URL
+        sync: false       # set in the dashboard if using external Postgres
 
-databases:
-  - name: cortex-db
-    plan: free
-    databaseName: cortex
-    user: cortex
+# --- Paid-tier additions (uncomment together with `plan: starter` above) ---
+#
+# Adds a 1 GB persistent disk so per-user FAISS indexes survive restarts.
+#
+#    disk:
+#      name: rag-indices
+#      mountPath: /var/data
+#      sizeGB: 1
+#
+# Then set:
+#    - key: RAG_INDEX_DIR
+#      value: "/var/data/rag_indices"
+#
+# And provision a managed Postgres database:
+#
+# databases:
+#   - name: cortex-db
+#     plan: basic-256mb
+#     databaseName: cortex
+#     user: cortex
