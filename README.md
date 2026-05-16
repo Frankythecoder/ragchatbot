@@ -1,11 +1,13 @@
 # Cortex — AI Chat & RAG Assistant
 
-Cortex is a cross-platform desktop AI assistant that pairs an Electron frontend
-with a Django REST backend. It supports two complementary modes: a **Normal
-chat** mode powered by OpenAI's Chat Completions API with multi-file
-attachments (text, code, and image inputs), and a **Retrieval-Augmented
-Generation (RAG)** mode that answers questions grounded in your own documents
-using a per-user FAISS vector index.
+Cortex is a Django web application that delivers two complementary chat
+modes: a **Normal chat** mode powered by OpenAI's Chat Completions API with
+multi-file attachments (text, code, and image inputs), and a
+**Retrieval-Augmented Generation (RAG)** mode that answers questions
+grounded in your own documents using a per-user FAISS vector index.
+
+The app runs as a single Django/Gunicorn web service and is ready to deploy
+on [Render](https://render.com/) with the included `render.yaml` blueprint.
 
 ---
 
@@ -16,10 +18,9 @@ using a per-user FAISS vector index.
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
-- [Installation](#installation)
+- [Local Development](#local-development)
+- [Deploying to Render](#deploying-to-render)
 - [Configuration](#configuration)
-- [Running the Application](#running-the-application)
-- [Packaging for Distribution](#packaging-for-distribution)
 - [Authentication Flow](#authentication-flow)
 - [How RAG Works](#how-rag-works)
 - [Supported File Formats](#supported-file-formats)
@@ -47,13 +48,15 @@ using a per-user FAISS vector index.
   model as data URLs), plain text, and source code files are embedded into
   the prompt; other file types are referenced by name.
 - RAG indexing for PDFs, DOCX, PPTX, XLSX, and TXT files — either file by
-  file or by recursively scanning an entire folder.
+  file or by recursively scanning an entire folder via the browser's
+  directory picker.
 
 **RAG pipeline**
-- Per-user FAISS index, isolated on disk.
+- Per-user FAISS index, isolated on disk (or on a persistent disk in
+  production).
 - Sentence-boundary-aware chunking with configurable size and overlap.
-- Hybrid retrieval: semantic similarity (L2 on normalized embeddings) blended
-  with keyword hit re-ranking.
+- Hybrid retrieval: semantic similarity (L2 on normalized embeddings)
+  blended with keyword hit re-ranking.
 - Per-document diversity pass so answers cite multiple sources when relevant.
 - Source attribution and retrieved-chunk previews rendered in the UI.
 
@@ -61,76 +64,67 @@ using a per-user FAISS vector index.
 - Sign-in, sign-up, and sign-out handled by Django's built-in auth views
   (`LoginView`, `LogoutView`, and a `UserCreationForm`-based signup view).
 - Password visibility toggle on every password field.
-- JWT access / refresh tokens (with rotation and blacklist) for all API
-  calls made from the desktop shell.
-- Sessions persist across app restarts via encrypted token storage in the
-  Electron user-data directory.
+- Session-based authentication for the API; the chat UI is served from the
+  same origin so the session cookie + CSRF token are all that's needed.
 
 **UX**
 - Light and dark themes with persisted preference.
 - Collapsible sidebar, chat search, file staging chips, and a welcome
   screen for new chats.
-- CSP-safe preload script with `contextBridge` for secure IPC.
 
 ---
 
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                        Electron Desktop App                         │
-│                                                                     │
-│   ┌──────────────┐    IPC    ┌────────────────────────────────┐    │
-│   │  Renderer    │ ────────► │  Main process (Node / Electron)│    │
-│   │  (chat UI)   │ ◄──────── │  - token store (encrypted disk)│    │
-│   └──────────────┘           │  - BrowserWindow navigation    │    │
-│                              │  - file/folder pickers         │    │
-│                              │  - apiService (fetch)          │    │
-│                              └────────────────┬───────────────┘    │
-└──────────────────────────────────────────────────┼─────────────────┘
-                                                   │ HTTPS/HTTP + JWT
-                                                   ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                        Django Backend (REST)                        │
-│                                                                     │
-│  /accounts/*   ─ Django auth: LoginView / LogoutView / SignUpView   │
-│  /auth-complete/ ─ Session → JWT bridge (issues access & refresh)   │
-│  /api/threads/   ─ CRUD for chat threads                            │
-│  /api/threads/<id>/chat/ ─ Send message, run LLM, persist turn      │
-│  /api/upload-document/   ─ Extract → chunk → embed → FAISS index    │
-│  /api/jwt-logout/        ─ Blacklist refresh token                  │
-│                                                                     │
-│  ┌────────────┐   ┌──────────────┐   ┌────────────────────────┐    │
-│  │   SQLite   │   │  OpenAI API  │   │  FAISS (per-user dir)  │    │
-│  │ users /    │   │  chat.compl. │   │  + sentence-transformers│   │
-│  │ threads /  │   │              │   │  embeddings            │    │
-│  │ messages   │   │              │   │                        │    │
-│  └────────────┘   └──────────────┘   └────────────────────────┘    │
-└────────────────────────────────────────────────────────────────────┘
+                        ┌────────────────────────┐
+                        │   Browser (Chat SPA)   │
+                        │  HTML + CSS + vanilla  │
+                        │  JS, served by Django  │
+                        └───────────┬────────────┘
+                                    │ HTTPS, same-origin
+                                    │ session cookie + CSRF
+                                    ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  Django + Gunicorn (single service)              │
+│                                                                  │
+│   /                ─ chat UI (login_required, renders template)  │
+│   /accounts/*      ─ Django auth: Login, Logout, SignUp          │
+│   /api/threads/    ─ CRUD for chat threads                       │
+│   /api/threads/<id>/chat/ ─ Send message, run LLM, persist turn  │
+│   /api/upload-document/   ─ Extract → chunk → embed → FAISS      │
+│                                                                  │
+│   Whitenoise serves /static/ in production.                      │
+│                                                                  │
+│  ┌────────────┐   ┌──────────────┐   ┌────────────────────────┐  │
+│  │ SQLite or  │   │  OpenAI API  │   │ FAISS (per-user dir)   │  │
+│  │ Postgres   │   │  chat.compl. │   │ + sentence-transformers│  │
+│  │ users /    │   │              │   │ embeddings             │  │
+│  │ threads /  │   │              │   │                        │  │
+│  │ messages   │   │              │   │                        │  │
+│  └────────────┘   └──────────────┘   └────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-The Electron shell loads Django's own login page at startup (when no JWT is
-stored). After a successful Django login, the backend renders an
-`auth_complete` page that issues JWT tokens and hands them to the Electron
-main process through the preload `electronAPI` bridge. From that point on,
-the desktop app navigates to the chat UI (`index.html`) and authenticates
-every API call with its JWT access token.
+Unauthenticated visitors are bounced to `/accounts/login/`. After a
+successful login, Django redirects to `/`, which renders the single-page
+chat UI. From the browser, every API call goes to the same origin and
+authenticates with the session cookie.
 
 ---
 
 ## Tech Stack
 
-**Frontend (Electron / Renderer)**
-- Electron 40
-- Electron Forge (packaging & distribution)
+**Frontend (browser, no build step)**
 - Vanilla JavaScript (no framework) with a small module system
-- `marked` for Markdown rendering
+- Served as Django templates + static files (Whitenoise in production)
+- `marked` for Markdown rendering (loaded from a CDN)
 
-**Backend (Django)**
+**Backend**
 - Django 4.2 with the built-in auth system
-- Django REST Framework
-- `djangorestframework-simplejwt` (+ token blacklist app)
-- `django-cors-headers`
+- Django REST Framework (session authentication)
+- Gunicorn (WSGI server in production)
+- Whitenoise (static-file serving in production)
 
 **AI & RAG**
 - OpenAI Python SDK (Chat Completions, default model `gpt-4o-mini`)
@@ -139,8 +133,8 @@ every API call with its JWT access token.
 - `pypdf`, `python-docx`, `python-pptx`, `openpyxl` for text extraction
 
 **Storage**
-- SQLite (users, threads, messages, JWT blacklist)
-- Filesystem FAISS indexes (one directory per user under `backend/rag_indices/`)
+- SQLite locally; Postgres in production (auto-switched via `DATABASE_URL`)
+- Filesystem FAISS indexes (one directory per user under `RAG_INDEX_DIR`)
 
 ---
 
@@ -148,198 +142,155 @@ every API call with its JWT access token.
 
 ```
 ragchatbot/
-├── backend/
-│   ├── manage.py
-│   ├── requirements.txt
-│   ├── .env.example
-│   ├── db.sqlite3                     # Created on first migrate
-│   ├── rag_indices/                   # Per-user FAISS indexes (gitignored)
-│   ├── chatapp/                       # Django project
-│   │   ├── settings.py
-│   │   ├── urls.py
-│   │   ├── asgi.py
-│   │   └── wsgi.py
-│   └── core/                          # Main Django app
-│       ├── models.py                  # ChatThread, Message
-│       ├── serializers.py
-│       ├── views.py                   # Auth, threads, chat, upload
-│       ├── urls.py                    # /api/* routes
-│       ├── auth_urls.py               # /accounts/* routes
-│       ├── migrations/
-│       ├── templates/registration/    # login, signup, logout, auth_complete
-│       └── llm/
-│           ├── embeddings.py          # SentenceTransformer lazy loader
-│           ├── vector_store.py        # FAISS load/save per user
-│           ├── rag_pipeline.py        # Extract, chunk, index, retrieve
-│           ├── normal_llm.py          # Prompt builder for chat mode
-│           └── title_generator.py     # Prompt builder for auto-titling
-│
-└── frontend/
-    ├── package.json
-    ├── forge.config.js
-    └── src/
-        ├── index.js                   # Electron main process
-        ├── preload.js                 # contextBridge → window.electronAPI
-        ├── index.html / index.css     # Chat UI
-        ├── renderer.js                # Renderer entry
-        ├── modules/
-        │   ├── chatManager.js         # Chat history, send, RAG indexing UI
-        │   ├── themeManager.js        # Light/dark toggle, persistence
-        │   └── uiHelpers.js           # Sidebar, scroll, misc UI
-        └── services/
-            └── apiService.js          # fetch() wrappers for the Django API
+├── render.yaml                       # Render blueprint
+├── README.md
+└── backend/
+    ├── manage.py
+    ├── requirements.txt
+    ├── build.sh                      # Render build step
+    ├── runtime.txt                   # Python version pin
+    ├── .env.example
+    ├── db.sqlite3                    # Created on first migrate (local dev)
+    ├── rag_indices/                  # Per-user FAISS indexes (gitignored)
+    ├── chatapp/                      # Django project
+    │   ├── settings.py
+    │   ├── urls.py
+    │   ├── asgi.py
+    │   └── wsgi.py
+    └── core/                         # Main Django app
+        ├── models.py                 # ChatThread, Message
+        ├── serializers.py
+        ├── views.py                  # chat_view, auth, threads, chat, upload
+        ├── urls.py                   # /api/* routes
+        ├── auth_urls.py              # /accounts/* routes
+        ├── migrations/
+        ├── templates/
+        │   ├── chat.html             # SPA shell (rendered for /)
+        │   └── registration/         # login, signup, logged_out
+        ├── static/core/
+        │   ├── css/index.css
+        │   └── js/
+        │       ├── api.js            # fetch() wrappers (session + CSRF)
+        │       ├── chatManager.js    # Chat history, send, RAG indexing UI
+        │       ├── themeManager.js   # Light/dark toggle, persistence
+        │       ├── uiHelpers.js      # Sidebar, scroll, misc UI
+        │       └── renderer.js       # Entry point
+        └── llm/
+            ├── embeddings.py
+            ├── vector_store.py
+            ├── rag_pipeline.py
+            ├── normal_llm.py
+            └── title_generator.py
 ```
 
 ---
 
 ## Prerequisites
 
-- **Python 3.10 or newer**
-- **Node.js 18 or newer** (and npm)
-- **OpenAI API key** with access to a Chat Completions model
-- On Windows, the first launch of `sentence-transformers` will download the
-  embedding model (~90 MB). Keep an internet connection available for that
-  initial run.
+- **Python 3.10 or newer** (3.11 recommended; Render uses 3.11.9 per
+  `runtime.txt`).
+- **OpenAI API key** with access to a Chat Completions model.
+- The first launch of `sentence-transformers` downloads the embedding
+  model (~90 MB). Keep an internet connection available for that initial
+  run.
 
 ---
 
-## Installation
+## Local Development
 
-Clone the repository:
+Clone the repository and set up the backend:
 
 ```bash
 git clone https://github.com/Frankythecoder/ragchatbot.git
-cd ragchatbot
-```
+cd ragchatbot/backend
 
-### 1. Backend
-
-```bash
-cd backend
 python -m venv .venv
-
 # Windows
 .venv\Scripts\activate
 # macOS / Linux
 source .venv/bin/activate
 
 pip install -r requirements.txt
-cp .env.example .env        # then edit .env — see Configuration
+cp .env.example .env        # edit and set OPENAI_API_KEY
 python manage.py migrate
 python manage.py createsuperuser   # optional, for /admin access
+python manage.py runserver
 ```
 
-### 2. Frontend
+Open <http://localhost:8000/>. You'll be redirected to the login page;
+create an account at <http://localhost:8000/accounts/signup/> and you're in.
 
-```bash
-cd ../frontend
-npm install
-```
+---
+
+## Deploying to Render
+
+The repo includes a `render.yaml` blueprint that provisions:
+
+1. A **Python web service** running Django + Gunicorn (serves the chat UI
+   and the JSON API).
+2. A **managed Postgres database** (`DATABASE_URL` is wired in
+   automatically).
+3. A **1 GB persistent disk** mounted at `/var/data` so per-user FAISS
+   indexes survive deploys.
+
+Deployment steps:
+
+1. Push this repo to GitHub.
+2. In the Render dashboard, choose **New → Blueprint** and point it at the
+   repository.
+3. Render detects `render.yaml` and creates the web service + database.
+4. Set `OPENAI_API_KEY` in the web service's environment variables
+   (the blueprint marks it `sync: false` so you can fill it in by hand).
+5. Trigger a deploy. The build step runs `pip install`, `collectstatic`,
+   and `migrate` automatically.
+6. Once the service is live, visit the assigned `*.onrender.com` URL,
+   sign up, and start chatting.
+
+> **Note on the embedding model.** On the first RAG upload, the
+> `sentence-transformers` model (~90 MB) is downloaded into the container.
+> Subsequent uploads reuse it for the lifetime of the dyno. Restarts
+> re-download it unless you cache it on the persistent disk by setting
+> `SENTENCE_TRANSFORMERS_HOME=/var/data/st_cache` in the env vars.
+
+### Free Postgres lifetime
+
+Render's free Postgres tier expires after 90 days. For long-term use,
+upgrade the database plan in `render.yaml` (`plan: starter` or higher)
+or bring your own Postgres URL via the `DATABASE_URL` env var.
 
 ---
 
 ## Configuration
 
-Create `backend/.env` (copy from `.env.example`) and fill in:
-
-```env
-DJANGO_SECRET_KEY=replace-with-a-long-random-string
-DJANGO_DEBUG=True
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-MAX_HISTORY_MESSAGES=20
-```
-
-See [Environment Variables](#environment-variables) for the full list,
-including RAG-tuning knobs.
+Local development reads `backend/.env` via `python-dotenv`. In production,
+set the same variables in the Render dashboard. See
+[Environment Variables](#environment-variables) for the full list.
 
 > **Security note:** never commit `.env`. The default `SECRET_KEY` in
 > `settings.py` is clearly marked insecure and is for development only.
 > Set `DJANGO_DEBUG=False` and provide a strong `DJANGO_SECRET_KEY` for any
-> non-local deployment.
-
----
-
-## Running the Application
-
-You need **two terminals** — one for the backend, one for the Electron shell.
-
-**Terminal 1 — Django API**
-
-```bash
-cd backend
-# Activate the virtualenv (see Installation)
-python manage.py runserver
-# Django is now serving http://localhost:8000
-```
-
-**Terminal 2 — Electron app**
-
-```bash
-cd frontend
-npm start
-```
-
-The Electron window opens at Django's login page
-(`http://localhost:8000/accounts/login/`). Create an account, sign in, and
-the app will hand off to the chat UI automatically.
-
----
-
-## Packaging for Distribution
-
-The frontend is wired up with Electron Forge. Platform-specific installers
-can be produced with:
-
-```bash
-cd frontend
-npm run make
-```
-
-Makers configured out of the box:
-
-| Platform | Maker                           |
-| -------- | ------------------------------- |
-| Windows  | `@electron-forge/maker-squirrel`|
-| macOS    | `@electron-forge/maker-zip`     |
-| Debian   | `@electron-forge/maker-deb`     |
-| RPM      | `@electron-forge/maker-rpm`     |
-
-Packaged builds still require a reachable Django backend. For a real
-deployment, host Django somewhere (e.g. behind Gunicorn + Nginx), update
-`BACKEND_URL` in `frontend/src/index.js` and
-`frontend/src/services/apiService.js`, and rebuild.
+> non-local deployment. The Render blueprint generates one automatically.
 
 ---
 
 ## Authentication Flow
 
-Cortex uses Django's built-in authentication for the user-facing pages and
-JWT for programmatic API access:
+Cortex uses Django's built-in session authentication for both the chat UI
+and the JSON API (same-origin):
 
-1. Electron starts. If no saved tokens exist, the main process loads
-   `http://localhost:8000/accounts/login/` (Django's `LoginView`).
-2. New users click **Create account**, which submits to
-   `/accounts/signup/`. The view uses `SignUpForm` — a subclass of Django's
-   `UserCreationForm` that requires a unique email alongside the standard
-   username / password fields.
-3. On successful login, Django redirects to `/auth-complete/`. That view
-   is `@login_required`, mints a JWT pair via `RefreshToken.for_user()`,
-   and renders a template whose inline script calls
-   `window.electronAPI.storeTokens(...)` followed by `navigateToChat()`.
-4. The Electron main process persists the tokens to the user-data directory
-   and swaps the window to the chat UI (`index.html`).
-5. From that point on, every API request carries
-   `Authorization: Bearer <access_token>`.
-6. On logout, the Electron shell POSTs to `/api/jwt-logout/` to blacklist
-   the refresh token, clears local token storage, then navigates to
-   `/accounts/logout/` so Django's `LogoutView` clears the session cookie
-   and redirects back to the login page.
-
-Tokens:
-- Access token lifetime: **1 day**
-- Refresh token lifetime: **7 days**
-- Refresh rotation: **enabled**, old refresh tokens are blacklisted on use.
+1. A request to `/` hits `chat_view`, which is `@login_required`.
+2. Unauthenticated users are redirected to `/accounts/login/` (Django's
+   `LoginView`). New users click **Create account**, which submits to
+   `/accounts/signup/` (custom `SignUpForm` extending `UserCreationForm`
+   with a required, unique email).
+3. On successful login, Django redirects to `/` and the chat template is
+   rendered.
+4. From that point on, every `fetch()` call from the browser is
+   same-origin, carries the session cookie, and includes the
+   `X-CSRFToken` header (the token is rendered into the page).
+5. Logout submits a POST to `/accounts/logout/` (via a `<form>` in the
+   settings dropdown) — Django's `LogoutView` clears the session cookie
+   and redirects to `/accounts/login/`.
 
 ---
 
@@ -354,9 +305,9 @@ When you upload a document in RAG mode, Cortex:
 3. **Embeds** each chunk with `sentence-transformers`
    (default `all-MiniLM-L6-v2`, L2-normalized).
 4. **Stores** embeddings in a per-user FAISS `IndexFlatL2` under
-   `backend/rag_indices/<user_id>/`, alongside a `metadata.json` that maps
-   each vector back to its source filename and text. Re-uploading the
-   same filename replaces the old chunks for that document rather than
+   `RAG_INDEX_DIR/<user_id>/`, alongside a `metadata.json` that maps each
+   vector back to its source filename and text. Re-uploading the same
+   filename replaces the old chunks for that document rather than
    duplicating them.
 
 When you ask a question in RAG mode, Cortex:
@@ -374,8 +325,6 @@ When you ask a question in RAG mode, Cortex:
    unrelated.
 6. Returns the answer along with the list of cited sources and the
    retrieved chunks (shown in the UI under the assistant message).
-
-All RAG knobs are exposed as environment variables — see below.
 
 ---
 
@@ -408,26 +357,25 @@ The Django upload endpoint caps request bodies at 50 MB
 
 ## API Reference
 
-All routes below are served by the Django backend at
-`http://localhost:8000` during development.
+All routes are served by the Django backend at the same origin as the chat
+UI. Local dev: <http://localhost:8000>. Production: `https://<your-app>.onrender.com`.
 
 ### Auth (server-rendered)
 
 | Method | Path                  | Description                                                   |
 | ------ | --------------------- | ------------------------------------------------------------- |
 | GET/POST | `/accounts/login/`  | Django `LoginView` (username + password).                     |
-| GET/POST | `/accounts/logout/` | Django `LogoutView`. Redirects to `/accounts/login/`.         |
+| POST     | `/accounts/logout/` | Django `LogoutView`. Redirects to `/accounts/login/`.         |
 | GET/POST | `/accounts/signup/` | Custom `SignUpView` built on `UserCreationForm`.              |
-| GET      | `/auth-complete/`   | `@login_required` bridge that emits JWTs to the Electron shell.|
+| GET      | `/`                 | `@login_required` chat UI.                                    |
 
-### JSON API (JWT-authenticated)
+### JSON API (session-authenticated)
 
-All endpoints below require `Authorization: Bearer <access_token>` unless
-noted.
+All endpoints below require an authenticated session and a valid
+`X-CSRFToken` header on write methods.
 
 | Method | Path                                   | Description                                                                    |
 | ------ | -------------------------------------- | ------------------------------------------------------------------------------ |
-| POST   | `/api/jwt-logout/`                     | Blacklists the supplied `refresh_token`.                                       |
 | GET    | `/api/threads/`                        | List the current user's chat threads.                                          |
 | POST   | `/api/threads/`                        | Create a new empty thread.                                                     |
 | GET    | `/api/threads/<id>/`                   | Thread detail (includes all messages, sources, retrieved chunks, token usage). |
@@ -435,32 +383,6 @@ noted.
 | DELETE | `/api/threads/<id>/`                   | Delete a thread and its messages (cascade).                                    |
 | POST   | `/api/threads/<id>/chat/`              | Send a message. Body: `{ "message", "files", "mode": "normal" \| "rag" }`.     |
 | POST   | `/api/upload-document/`                | Multipart upload (`file`, optional `file_path`). Indexes into the user's FAISS store. |
-
-**Example — send a message:**
-
-```http
-POST /api/threads/42/chat/ HTTP/1.1
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "message": "Summarize the uploaded PDF",
-  "mode": "rag",
-  "files": []
-}
-```
-
-Response:
-
-```json
-{
-  "message": "...assistant reply...",
-  "tokens": { "prompt_tokens": 523, "completion_tokens": 128, "total_tokens": 651 },
-  "thread_title": "Uploaded PDF Summary",
-  "sources": ["report-q1.pdf"],
-  "retrieved_chunks": ["...excerpt one...", "...excerpt two..."]
-}
-```
 
 ---
 
@@ -498,38 +420,42 @@ username; the signup form also captures a unique email.
 All variables are read from `backend/.env` (via `python-dotenv`) or the
 process environment.
 
-| Variable                | Default              | Purpose                                                 |
-| ----------------------- | -------------------- | ------------------------------------------------------- |
-| `DJANGO_SECRET_KEY`     | insecure dev default | Django cryptographic secret. **Set in production.**     |
-| `DJANGO_DEBUG`          | `True`               | Set to `False` in production.                           |
-| `OPENAI_API_KEY`        | — (required)         | Your OpenAI API key.                                    |
-| `OPENAI_MODEL`          | `gpt-4o-mini`        | Chat Completions model name.                            |
-| `MAX_HISTORY_MESSAGES`  | `20`                 | Max previous turns sent with each chat request.         |
-| `RAG_CHUNK_SIZE`        | `2000`               | Target characters per chunk.                            |
-| `RAG_CHUNK_OVERLAP`     | `300`                | Overlap (in chars, approximated via word slicing).      |
-| `RAG_TOP_K`             | `8`                  | Chunks surfaced to the LLM per RAG query.               |
-| `RAG_EMBEDDING_MODEL`   | `all-MiniLM-L6-v2`   | Any `sentence-transformers` model id.                   |
+| Variable                      | Default              | Purpose                                                 |
+| ----------------------------- | -------------------- | ------------------------------------------------------- |
+| `DJANGO_SECRET_KEY`           | insecure dev default | Django cryptographic secret. **Set in production.**     |
+| `DJANGO_DEBUG`                | `True`               | Set to `False` in production.                           |
+| `DJANGO_ALLOWED_HOSTS`        | `localhost,127.0.0.1`| Comma-separated hostnames.                              |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | — (empty)            | Comma-separated full origins (e.g. `https://x.onrender.com`). |
+| `DATABASE_URL`                | — (unset → SQLite)   | Postgres URL. Render's blueprint fills this in.         |
+| `OPENAI_API_KEY`              | — (required)         | Your OpenAI API key.                                    |
+| `OPENAI_MODEL`                | `gpt-4o-mini`        | Chat Completions model name.                            |
+| `MAX_HISTORY_MESSAGES`        | `20`                 | Max previous turns sent with each chat request.         |
+| `RAG_CHUNK_SIZE`              | `2000`               | Target characters per chunk.                            |
+| `RAG_CHUNK_OVERLAP`           | `300`                | Overlap (in chars, approximated via word slicing).      |
+| `RAG_TOP_K`                   | `8`                  | Chunks surfaced to the LLM per RAG query.               |
+| `RAG_EMBEDDING_MODEL`         | `all-MiniLM-L6-v2`   | Any `sentence-transformers` model id.                   |
+| `RAG_INDEX_DIR`               | `backend/rag_indices`| Where per-user FAISS indexes are written.               |
 
 ---
 
 ## Troubleshooting
 
-**The Electron window shows "Cannot GET" or a connection error.**
-The Django backend isn't running or isn't reachable at
-`http://localhost:8000`. Start it with `python manage.py runserver`.
-
-**Login succeeds but the chat UI never opens.**
-The `auth_complete` template relies on `window.electronAPI`, which is only
-exposed by the Electron preload script. Make sure you're reaching the app
-through the Electron shell (`npm start`) rather than a regular browser.
+**The browser shows "DisallowedHost" or "CSRF verification failed".**
+Set `DJANGO_ALLOWED_HOSTS` to include your hostname and
+`DJANGO_CSRF_TRUSTED_ORIGINS` to include the full `https://...` origin.
+On Render, the blueprint sets `RENDER_EXTERNAL_HOSTNAME` automatically;
+`settings.py` already trusts it.
 
 **"OPENAI_API_KEY" errors on first message.**
-Set `OPENAI_API_KEY` in `backend/.env` and restart `runserver`. Environment
-variables are loaded at process start.
+Set `OPENAI_API_KEY` in `backend/.env` (local) or the Render dashboard
+(production) and restart. Environment variables are loaded at process
+start.
 
 **First RAG upload takes a while.**
 The embedding model is downloaded on first use (~90 MB). Subsequent
-uploads reuse the cached model and are fast.
+uploads reuse the cached model and are fast. To survive restarts on
+Render, point `SENTENCE_TRANSFORMERS_HOME` at the persistent disk:
+`SENTENCE_TRANSFORMERS_HOME=/var/data/st_cache`.
 
 **RAG mode answers "I don't know" for questions you expect it to answer.**
 The retrieved chunks were judged unrelated to the question. Try:
@@ -538,15 +464,10 @@ The retrieved chunks were judged unrelated to the question. Try:
 - Lowering `RAG_CHUNK_SIZE` for finer-grained retrieval,
 - Rephrasing the question with keywords that appear in the source text.
 
-**Logout deprecation warning from Django.**
-Django 4.2 still allows `GET /accounts/logout/` but marks it deprecated.
-The app opts in explicitly via `http_method_names=["get", "post", "options"]`.
-When upgrading to Django 5+, switch the Electron logout handler to POST.
-
-**Port 8000 already in use.**
-Run Django on a different port with
-`python manage.py runserver 0.0.0.0:8001` and update `BACKEND_URL` in
-`frontend/src/index.js` and `frontend/src/services/apiService.js`.
+**Static files 404 in production.**
+The build step runs `python manage.py collectstatic --noinput`. If you
+deploy without running build, no static files will be served. Whitenoise
+serves them at `/static/...`.
 
 ---
 

@@ -1,0 +1,51 @@
+# Render blueprint for the Cortex web app.
+#
+# What this provisions:
+#   1. A Python web service running Django + Gunicorn (serves both the chat
+#      UI and the JSON API).
+#   2. A managed Postgres database. The DATABASE_URL is injected into the
+#      web service automatically.
+#   3. A persistent disk mounted at /var/data so the per-user FAISS RAG
+#      indexes survive deploys and restarts.
+#
+# What you still need to set manually in the Render dashboard:
+#   - OPENAI_API_KEY — your OpenAI key.
+#   - (Optional) OPENAI_MODEL, MAX_HISTORY_MESSAGES, and the RAG_* knobs.
+#
+# DJANGO_SECRET_KEY is generated for you by `generateValue: true`.
+
+services:
+  - type: web
+    name: cortex
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn chatapp.wsgi:application"
+    disk:
+      name: rag-indices
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: RAG_INDEX_DIR
+        value: "/var/data/rag_indices"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cortex-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: "gpt-4o-mini"
+
+databases:
+  - name: cortex-db
+    plan: free
+    databaseName: cortex
+    user: cortex

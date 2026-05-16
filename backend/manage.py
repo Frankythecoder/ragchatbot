@@ -3,6 +3,11 @@
 import os
 import sys
 
+# Silence Intel Fortran's Ctrl+C stack-trace on Windows (Anaconda MKL ships
+# libifcoremd.dll, which is pulled in via numpy/faiss/sentence-transformers).
+# Must be set BEFORE any of those libraries are imported.
+os.environ.setdefault("FOR_DISABLE_CONSOLE_CTRL_HANDLER", "1")
+
 
 def main():
     """Run administrative tasks."""

@@ -1,5 +1,6 @@
 (function () {
   const ns = (window.App = window.App || {});
+  const Api = () => window.App.Api;
 
   let currentThread = null; // { id, title, messages: [] }
 
@@ -8,7 +9,9 @@
     messageInput,
     sendButton,
     chatHistoryList,
-    chatSearch;
+    chatSearch,
+    fileInput,
+    folderInput;
 
   let stagedFiles = [];
   let selectedMode = "normal";
@@ -33,7 +36,7 @@
       chip.appendChild(name);
       staging.appendChild(chip);
 
-      const result = await window.electronAPI.uploadDocument(file.path);
+      const result = await Api().uploadDocument(file);
       if (result && result.success) {
         name.textContent = `${file.name} (${result.chunks_indexed} chunks)`;
         chip.classList.remove("rag-indexing");
@@ -263,7 +266,7 @@
   // ---- Sidebar: history ----
 
   async function refreshHistorySidebar(filter = "") {
-    const threads = await window.electronAPI.getThreads();
+    const threads = await Api().getThreads();
     chatHistoryList.innerHTML = "";
 
     if (!threads || threads.length === 0) {
@@ -313,7 +316,7 @@
       delBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (confirm("Are you sure you want to delete this chat?")) {
-          await window.electronAPI.deleteThread(thread.id);
+          await Api().deleteThread(thread.id);
           if (currentThread && currentThread.id === thread.id) {
             startNewChat();
           } else {
@@ -347,7 +350,7 @@
     async function finishRename() {
       const newTitle = input.value.trim();
       if (newTitle && newTitle !== thread.title) {
-        await window.electronAPI.renameThread(thread.id, newTitle);
+        await Api().renameThread(thread.id, newTitle);
         if (currentThread && currentThread.id === thread.id) {
           currentThread.title = newTitle;
         }
@@ -371,7 +374,7 @@
   // ---- Thread management ----
 
   async function loadThread(threadId) {
-    const thread = await window.electronAPI.getThread(threadId);
+    const thread = await Api().getThread(threadId);
     if (!thread) return;
 
     currentThread = {
@@ -435,7 +438,7 @@
 
     // If no thread yet, create one on the backend
     if (!currentThread) {
-      const newThread = await window.electronAPI.createThread();
+      const newThread = await Api().createThread();
       if (!newThread) {
         appendMessage(false, "Error: Could not create a new chat thread.", false);
         return;
@@ -472,7 +475,7 @@
         textContent: f.textContent || null,
       }));
 
-      const response = await window.electronAPI.sendMessage(
+      const response = await Api().sendMessage(
         currentThread.id,
         message,
         filesForBackend,
@@ -526,6 +529,8 @@
     sendButton = document.getElementById("send-button");
     chatHistoryList = document.getElementById("chat-history");
     chatSearch = document.getElementById("chat-search");
+    fileInput = document.getElementById("file-input");
+    folderInput = document.getElementById("folder-input");
 
     marked.setOptions({ breaks: true, gfm: true });
 
@@ -561,21 +566,23 @@
     });
 
     const uploadBtn = document.getElementById("upload-btn");
-    uploadBtn.addEventListener("click", async () => {
-      const files = await window.electronAPI.pickFiles();
-      if (!files || files.length === 0) return;
+    uploadBtn.addEventListener("click", () => {
+      fileInput.value = ""; // allow re-selecting the same file
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async () => {
+      if (!fileInput.files || fileInput.files.length === 0) return;
+      const files = await Api().describeFiles(fileInput.files);
 
       if (selectedMode === "normal") {
-        // Normal mode: stage files for inline injection into the message
         addStagedFiles(files);
       } else {
-        // RAG mode: index PDF/TXT into knowledge base (persistent)
         const ragExts = ["pdf", "txt", "docx", "pptx", "xlsx"];
         const indexable = files.filter((f) => ragExts.includes(f.ext));
         const nonIndexable = files.filter((f) => !ragExts.includes(f.ext));
 
         if (nonIndexable.length > 0) {
-          // Non-indexable files still get staged for inline injection
           addStagedFiles(nonIndexable);
         }
 
@@ -587,8 +594,13 @@
 
     // RAG folder upload
     const folderBtn = document.getElementById("upload-folder-btn");
-    folderBtn.addEventListener("click", async () => {
-      const result = await window.electronAPI.pickFolder();
+    folderBtn.addEventListener("click", () => {
+      folderInput.value = "";
+      folderInput.click();
+    });
+
+    folderInput.addEventListener("change", async () => {
+      const result = Api().describeFolder(folderInput.files);
       if (!result || !result.files || result.files.length === 0) return;
 
       // Show folder name as a header chip, then index all files
@@ -634,9 +646,7 @@
       folderBtn.style.display = ragToggle.checked ? "" : "none";
     });
 
-    document.getElementById("logout-btn").addEventListener("click", async () => {
-      await window.electronAPI.logout();
-    });
+    // Logout uses a real <form method="post"> that hits /accounts/logout/
 
     // Initial load
     (async () => {

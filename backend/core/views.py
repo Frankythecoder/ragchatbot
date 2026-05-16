@@ -13,7 +13,6 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 from openai import OpenAI
 
 from .models import ChatThread, Message
@@ -102,42 +101,11 @@ class SignUpView(CreateView):
 
 
 @login_required
-def auth_complete(request):
-    """Session-authenticated bridge that hands JWT tokens to the Electron
-    shell after Django's LoginView completes.
+def chat_view(request):
+    """Render the single-page chat UI. Session-authenticated; unauthenticated
+    visitors are redirected to /accounts/login/ by @login_required.
     """
-    refresh = RefreshToken.for_user(request.user)
-    return render(
-        request,
-        "registration/auth_complete.html",
-        {
-            "access_token": str(refresh.access_token),
-            "refresh_token": str(refresh),
-        },
-    )
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def jwt_logout(request):
-    """Blacklist the supplied refresh token so the JWT pair can no longer be
-    used. Django session logout is handled separately by auth_views.LogoutView.
-    """
-    refresh_token = request.data.get("refresh_token")
-    if not refresh_token:
-        return Response(
-            {"detail": "Refresh token is required."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    try:
-        token = RefreshToken(refresh_token)
-        token.blacklist()
-        return Response({"success": True, "message": "Logged out successfully."})
-    except Exception:
-        return Response(
-            {"detail": "Invalid or expired token."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    return render(request, "chat.html")
 
 
 # ---------------------------------------------------------------------------
