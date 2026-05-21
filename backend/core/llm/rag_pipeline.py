@@ -119,7 +119,9 @@ def index_document(user_id, filename, text):
 
 
 def retrieve(user_id, query, top_k=None):
-    """Hybrid retrieval: semantic similarity + keyword re-ranking."""
+    """Hybrid retrieval: semantic similarity + keyword re-ranking +
+    filename-mention boost.
+    """
     top_k = top_k or settings.RAG_TOP_K
     index, metadata = load_index(user_id)
 
@@ -128,8 +130,12 @@ def retrieve(user_id, query, top_k=None):
 
     query_vec = embed_texts([query])
 
-    # Fetch extra candidates for re-ranking
-    n_candidates = min(top_k * 3, index.ntotal)
+    # Score every chunk in the index, not just the top-N nearest. The diversity
+    # pass below can only surface a doc if at least one of its chunks reaches
+    # this scoring loop — capping candidates at top_k*3 lets a chunk-heavy doc
+    # drown out a chunk-light one. Per-user indexes are small (≪10k chunks)
+    # so an exhaustive scan is cheap.
+    n_candidates = index.ntotal
     distances, indices = index.search(query_vec, n_candidates)
 
     # Extract meaningful query terms for keyword boosting
@@ -144,6 +150,19 @@ def retrieve(user_id, query, top_k=None):
         if len(w) > 2 and w not in stop_words
     ]
 
+    # If the query mentions a word stem from any indexed filename, treat that
+    # file as the user's target and boost its chunks above the field. Without
+    # this, a question like "what's in foo.pdf" can't outrank a larger doc
+    # that semantically matches "what's in" generically.
+    query_lower = query.lower()
+    ext_stems = {"pdf", "docx", "pptx", "xlsx", "txt", "doc", "ppt", "xls"}
+    targeted_files = set()
+    for m in metadata:
+        base = os.path.basename(m["filename"]).lower()
+        stems = [s for s in re.findall(r'[a-z]{4,}', base) if s not in ext_stems]
+        if any(s in query_lower for s in stems):
+            targeted_files.add(m["filename"])
+
     scored = []
     for rank, idx in enumerate(indices[0]):
         if idx < 0 or idx >= len(metadata):
@@ -152,7 +171,11 @@ def retrieve(user_id, query, top_k=None):
         keyword_hits = sum(1 for t in query_terms if t in chunk_lower)
         semantic_score = 1.0 / (1.0 + float(distances[0][rank]))
         keyword_score = keyword_hits / max(len(query_terms), 1)
-        combined = semantic_score + keyword_score * 0.5
+        # filename_boost dominates the other terms (max semantic≈1, max
+        # keyword*0.5=0.5) so a targeted file's chunks always rank above
+        # non-targeted ones.
+        filename_boost = 2.0 if metadata[idx]["filename"] in targeted_files else 0.0
+        combined = semantic_score + keyword_score * 0.5 + filename_boost
         scored.append((combined, idx))
 
     scored.sort(key=lambda x: x[0], reverse=True)
