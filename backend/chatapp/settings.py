@@ -167,7 +167,7 @@ MAX_HISTORY_MESSAGES = int(os.environ.get("MAX_HISTORY_MESSAGES", "20"))
 # --- RAG ---
 RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "2000"))
 RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "300"))
-RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "8"))
+RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "12"))
 # Embedding model — uses the OpenAI Embeddings API (no local torch model).
 # Defaults to text-embedding-3-small at 1536 dims; for cheaper/smaller
 # vectors set RAG_EMBEDDING_DIM to e.g. 512.

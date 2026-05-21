@@ -224,17 +224,27 @@ def build_rag_conversation(content, results):
         labeled.append(f"[Document: {doc_name}]\n{r['text']}")
     context_text = "\n\n---\n\n".join(labeled)
 
-    # RAG: answer-focused prompt; refusal only in system msg (soft)
+    # RAG: answer-focused prompt. Refusal threshold is intentionally loose —
+    # we'd rather have the model attempt an answer from related context than
+    # bail out because the user typed "absrtact" instead of "abstract".
     conversation = [
         {
             "role": "system",
-            "content": "You are a helpful research assistant. "
-            "Answer questions based on the document excerpts the user provides. "
-            "Include direct quotes in quotation marks, reference which document "
-            "each quote comes from, then explain. Do not use outside knowledge. "
-            "Only if the excerpts are completely unrelated to the question, "
-            "respond with: \"I don't know. The answer to your question "
-            "was not found in the uploaded documents.\"",
+            "content": (
+                "You are a helpful research assistant. Answer the user's "
+                "question using only the document excerpts provided below. "
+                "The user's question may contain typos or paraphrase the "
+                "document — match by intent, not exact spelling. "
+                "Include direct quotes in quotation marks, name the document "
+                "each quote came from, then explain in your own words. "
+                "Do not use outside knowledge. "
+                "If the excerpts cover the topic but don't contain the "
+                "specific section or detail the user asked for, answer with "
+                "what the excerpts do say and note what's missing. "
+                "Respond with \"I don't know. The answer to your question "
+                "was not found in the uploaded documents.\" ONLY when none "
+                "of the excerpts plausibly relate to the question's topic."
+            ),
         },
         {
             "role": "user",
