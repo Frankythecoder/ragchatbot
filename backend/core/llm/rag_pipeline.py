@@ -163,6 +163,17 @@ def retrieve(user_id, query, top_k=None):
         if any(s in query_lower for s in stems):
             targeted_files.add(m["filename"])
 
+    # First metadata index for each targeted file. Chunks are stored in
+    # insertion order, so this is the doc's opening chunk — where the title,
+    # abstract, and intro usually live. We bump it so a typo'd question like
+    # "what does the absrtact say" can't lose the abstract chunk to mid-doc
+    # chunks that happened to score higher on the noisy semantic signal.
+    first_chunk_idx = {}
+    for idx, m in enumerate(metadata):
+        fn = m["filename"]
+        if fn in targeted_files and fn not in first_chunk_idx:
+            first_chunk_idx[fn] = idx
+
     scored = []
     for rank, idx in enumerate(indices[0]):
         if idx < 0 or idx >= len(metadata):
@@ -173,9 +184,15 @@ def retrieve(user_id, query, top_k=None):
         keyword_score = keyword_hits / max(len(query_terms), 1)
         # filename_boost dominates the other terms (max semantic≈1, max
         # keyword*0.5=0.5) so a targeted file's chunks always rank above
-        # non-targeted ones.
+        # non-targeted ones. The first-chunk bonus puts that file's opening
+        # chunk above its own other chunks.
         filename_boost = 2.0 if metadata[idx]["filename"] in targeted_files else 0.0
-        combined = semantic_score + keyword_score * 0.5 + filename_boost
+        first_chunk_bonus = (
+            1.0 if idx == first_chunk_idx.get(metadata[idx]["filename"]) else 0.0
+        )
+        combined = (
+            semantic_score + keyword_score * 0.5 + filename_boost + first_chunk_bonus
+        )
         scored.append((combined, idx))
 
     scored.sort(key=lambda x: x[0], reverse=True)
