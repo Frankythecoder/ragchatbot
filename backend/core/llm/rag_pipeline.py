@@ -118,15 +118,68 @@ def index_document(user_id, filename, text):
     return len(chunks)
 
 
+_chat_client = None
+
+
+def _get_chat_client():
+    global _chat_client
+    if _chat_client is None:
+        from openai import OpenAI
+        _chat_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    return _chat_client
+
+
+def _rewrite_query(query):
+    """Repair typos and light-paraphrase a user query before retrieval.
+
+    The original query still flows through to the answer-generating LLM call;
+    only retrieval (embedding, keyword scoring, filename matching) uses the
+    rewritten version. Returns the original query on any failure so retrieval
+    never blocks on the rewrite call.
+    """
+    try:
+        response = _get_chat_client().chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You preprocess search queries for a document "
+                        "retrieval system. Rewrite the user's question to: "
+                        "(1) fix obvious spelling typos, "
+                        "(2) preserve filenames, proper nouns, and technical "
+                        "terms exactly, "
+                        "(3) keep the intent and length similar. "
+                        "Return only the rewritten query, no explanation, "
+                        "no quotes."
+                    ),
+                },
+                {"role": "user", "content": query},
+            ],
+            max_tokens=200,
+            temperature=0,
+        )
+        rewritten = response.choices[0].message.content.strip().strip('"').strip("'")
+        return rewritten or query
+    except Exception:
+        return query
+
+
 def retrieve(user_id, query, top_k=None):
     """Hybrid retrieval: semantic similarity + keyword re-ranking +
-    filename-mention boost.
+    filename-mention boost. Queries pass through an LLM typo-repair step
+    before being embedded.
     """
     top_k = top_k or settings.RAG_TOP_K
     index, metadata = load_index(user_id)
 
     if index.ntotal == 0:
         return []
+
+    # Repair typos before retrieval. Shadowing `query` is intentional —
+    # everything below (embedding, filename detection, keyword scoring)
+    # should use the cleaned version.
+    query = _rewrite_query(query)
 
     query_vec = embed_texts([query])
 
@@ -163,16 +216,19 @@ def retrieve(user_id, query, top_k=None):
         if any(s in query_lower for s in stems):
             targeted_files.add(m["filename"])
 
-    # First metadata index for each targeted file. Chunks are stored in
-    # insertion order, so this is the doc's opening chunk — where the title,
-    # abstract, and intro usually live. We bump it so a typo'd question like
-    # "what does the absrtact say" can't lose the abstract chunk to mid-doc
-    # chunks that happened to score higher on the noisy semantic signal.
-    first_chunk_idx = {}
-    for idx, m in enumerate(metadata):
-        fn = m["filename"]
-        if fn in targeted_files and fn not in first_chunk_idx:
-            first_chunk_idx[fn] = idx
+    # When the user names a file, they want answers from that file regardless
+    # of which section the answer lives in or how badly the question is typo'd.
+    # Expand top_k so every chunk of the targeted file fits, plus one per other
+    # doc for cross-doc context. Capped so huge docs don't blow the context.
+    MAX_TOP_K = 50
+    if targeted_files:
+        targeted_chunk_count = sum(
+            1 for m in metadata if m["filename"] in targeted_files
+        )
+        other_doc_count = len(
+            {m["filename"] for m in metadata} - targeted_files
+        )
+        top_k = min(max(top_k, targeted_chunk_count + other_doc_count), MAX_TOP_K)
 
     scored = []
     for rank, idx in enumerate(indices[0]):
@@ -184,15 +240,10 @@ def retrieve(user_id, query, top_k=None):
         keyword_score = keyword_hits / max(len(query_terms), 1)
         # filename_boost dominates the other terms (max semantic≈1, max
         # keyword*0.5=0.5) so a targeted file's chunks always rank above
-        # non-targeted ones. The first-chunk bonus puts that file's opening
-        # chunk above its own other chunks.
+        # non-targeted ones. Combined with the top_k bump above, this means
+        # every targeted chunk gets pulled in before any non-targeted one.
         filename_boost = 2.0 if metadata[idx]["filename"] in targeted_files else 0.0
-        first_chunk_bonus = (
-            1.0 if idx == first_chunk_idx.get(metadata[idx]["filename"]) else 0.0
-        )
-        combined = (
-            semantic_score + keyword_score * 0.5 + filename_boost + first_chunk_bonus
-        )
+        combined = semantic_score + keyword_score * 0.5 + filename_boost
         scored.append((combined, idx))
 
     scored.sort(key=lambda x: x[0], reverse=True)
