@@ -248,7 +248,15 @@ def retrieve(user_id, query, top_k=None):
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Diversity: ensure representation from every document
+    # Drop chunks far below the top score before the diversity pass. Without
+    # this floor, the per-document pass below pulled one chunk from EVERY
+    # indexed doc — even off-topic ones — and their filenames then showed
+    # up in `sources`. 0.6 keeps near-equal matches and excludes clear
+    # misses; the top chunk itself always survives (top * 0.6 < top).
+    top_score = scored[0][0] if scored else 0.0
+    relevance_floor = top_score * 0.6
+
+    # Diversity: one chunk per relevant document first, then fill the rest.
     doc_best = {}
     for score, idx in scored:
         doc = metadata[idx]["filename"]
@@ -258,15 +266,18 @@ def retrieve(user_id, query, top_k=None):
     selected = set()
     results = []
 
-    # First pass: top chunk from each document
     for score, idx in doc_best.values():
+        if score < relevance_floor:
+            continue
         if len(results) >= top_k:
             break
         results.append((score, idx))
         selected.add(idx)
 
-    # Second pass: fill remaining slots with best overall
+    # scored is sorted desc, so the first sub-floor chunk means we're done.
     for score, idx in scored:
+        if score < relevance_floor:
+            break
         if len(results) >= top_k:
             break
         if idx not in selected:
