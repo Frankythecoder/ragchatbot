@@ -3,7 +3,11 @@ import re
 
 import numpy as np
 import faiss
+from openai import OpenAI
 from pypdf import PdfReader
+from docx import Document
+from pptx import Presentation
+from openpyxl import load_workbook
 from django.conf import settings
 
 from .embeddings import embed_texts
@@ -19,12 +23,10 @@ def extract_text(file_path):
         return "\n".join(page.extract_text() or "" for page in reader.pages)
 
     if lower.endswith(".docx"):
-        from docx import Document
         doc = Document(file_path)
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
     if lower.endswith(".pptx"):
-        from pptx import Presentation
         prs = Presentation(file_path)
         texts = []
         for slide in prs.slides:
@@ -36,7 +38,6 @@ def extract_text(file_path):
         return "\n".join(texts)
 
     if lower.endswith(".xlsx"):
-        from openpyxl import load_workbook
         wb = load_workbook(file_path, read_only=True, data_only=True)
         rows = []
         for sheet in wb.worksheets:
@@ -124,7 +125,6 @@ _chat_client = None
 def _get_chat_client():
     global _chat_client
     if _chat_client is None:
-        from openai import OpenAI
         _chat_client = OpenAI(api_key=settings.OPENAI_API_KEY)
     return _chat_client
 

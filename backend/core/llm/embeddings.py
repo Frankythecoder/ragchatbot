@@ -9,6 +9,7 @@ Public surface:
     get_embedding_dimension() -> int
 """
 import numpy as np
+from openai import OpenAI
 from django.conf import settings
 
 _client = None
@@ -19,7 +20,6 @@ def _get_client():
     if _client is None:
         # Lazy import so the openai module isn't loaded at app boot when RAG
         # is never used in this request cycle.
-        from openai import OpenAI
         _client = OpenAI(api_key=settings.OPENAI_API_KEY)
     return _client
 
