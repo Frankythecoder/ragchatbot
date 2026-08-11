@@ -100,6 +100,7 @@
         <div id="input-container">
           <div id="file-staging" class="file-staging"></div>
           <div class="input-row">
+            {% if is_superuser %}
             <button id="upload-btn" title="Upload documents to RAG knowledge base (PDF, DOCX, PPTX, XLSX, TXT)">
               <svg viewBox="0 0 24 24" width="22" height="22">
                 <path fill="currentColor"
@@ -114,6 +115,7 @@
             </button>
             <input type="file" id="file-input" multiple style="display:none;" />
             <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
+            {% endif %}
             <textarea id="message-input" placeholder="Type your message..." rows="1"></textarea>
             <button id="send-button">
               <svg viewBox="0 0 24 24" width="24" height="24">
@@ -129,6 +131,8 @@
 
   <script>
     window.CORTEX_CSRF_TOKEN = "{{ csrf_token }}";
+    window.CORTEX_IS_SUPERUSER = {% if is_superuser %}true{% else %}false{% endif %};
+    window.CORTEX_DAILY_LIMIT = {{ daily_message_limit }};
   </script>
   <script src="{% static 'core/js/api.js' %}"></script>
   <script src="{% static 'core/js/chatManager.js' %}"></script>

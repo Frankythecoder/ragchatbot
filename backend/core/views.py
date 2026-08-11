@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.generic import CreateView
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -102,7 +103,10 @@ def chat_view(request):
     """Render the single-page chat UI. Session-authenticated; unauthenticated
     visitors are redirected to /accounts/login/ by @login_required.
     """
-    return render(request, "chat.html")
+    return render(request, "chat.html", {
+        "is_superuser": request.user.is_superuser,
+        "daily_message_limit": settings.DAILY_MESSAGE_LIMIT,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +179,25 @@ def send_message(request, thread_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Daily rate limit for non-superuser accounts (calendar day, server tz).
+    if not request.user.is_superuser:
+        today = timezone.now().date()
+        daily_count = Message.objects.filter(
+            thread__user=request.user,
+            sender="user",
+            timestamp__date=today,
+        ).count()
+        if daily_count >= settings.DAILY_MESSAGE_LIMIT:
+            return Response(
+                {
+                    "detail": (
+                        f"Daily limit of {settings.DAILY_MESSAGE_LIMIT} "
+                        f"messages reached. Please try again tomorrow."
+                    )
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
     # Save user message with attachment metadata
     file_meta = [
         {
@@ -194,11 +217,17 @@ def send_message(request, thread_id):
     user_msg_count = thread.messages.filter(sender="user").count()
     is_first_message = user_msg_count == 1
 
-    # Build RAG conversation from retrieved chunks
+    # Build RAG conversation from retrieved chunks. Non-superusers query the
+    # primary superuser's knowledge base since they cannot upload their own.
     sources = []
     retrieved_chunks = []
     from .llm.rag_pipeline import retrieve, build_rag_conversation
-    results = retrieve(request.user.id, content)
+    if request.user.is_superuser:
+        rag_user_id = request.user.id
+    else:
+        admin = User.objects.filter(is_superuser=True).order_by("id").first()
+        rag_user_id = admin.id if admin else None
+    results = retrieve(rag_user_id, content) if rag_user_id is not None else []
     if results:
         conversation, sources, retrieved_chunks = build_rag_conversation(
             content, results
@@ -282,6 +311,12 @@ def send_message(request, thread_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def upload_document(request):
+    if not request.user.is_superuser:
+        return Response(
+            {"detail": "Only administrators can upload documents."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     file = request.FILES.get("file")
     if not file:
         return Response(

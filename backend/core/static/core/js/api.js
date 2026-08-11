@@ -90,12 +90,19 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, files: files || [] }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          detail = data.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
       return await res.json();
     } catch (e) {
       console.error("sendMessage:", e);
       return {
-        message: `Could not reach the backend.\n\nError: ${e.message}`,
+        message: e.message,
         tokens: null,
         thread_title: null,
         sources: [],

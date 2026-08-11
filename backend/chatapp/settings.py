@@ -164,6 +164,12 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 MAX_HISTORY_MESSAGES = int(os.environ.get("MAX_HISTORY_MESSAGES", "20"))
 
+# --- Access control ---
+# Non-superuser accounts are capped at this many chat requests per calendar
+# day (UTC). Superusers are unlimited and are the only accounts that can
+# upload documents to the RAG knowledge base.
+DAILY_MESSAGE_LIMIT = int(os.environ.get("DAILY_MESSAGE_LIMIT", "20"))
+
 # --- RAG ---
 RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "2000"))
 RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "300"))

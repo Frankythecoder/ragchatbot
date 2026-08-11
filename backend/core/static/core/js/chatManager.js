@@ -563,69 +563,75 @@
       await refreshHistorySidebar(e.target.value.toLowerCase());
     });
 
+    // Upload / folder buttons are only rendered for superusers; skip wiring
+    // when the elements aren't present.
     const uploadBtn = document.getElementById("upload-btn");
-    uploadBtn.addEventListener("click", () => {
-      fileInput.value = ""; // allow re-selecting the same file
-      fileInput.click();
-    });
+    if (uploadBtn && fileInput) {
+      uploadBtn.addEventListener("click", () => {
+        fileInput.value = ""; // allow re-selecting the same file
+        fileInput.click();
+      });
 
-    fileInput.addEventListener("change", async () => {
-      if (!fileInput.files || fileInput.files.length === 0) return;
-      const files = await Api().describeFiles(fileInput.files);
+      fileInput.addEventListener("change", async () => {
+        if (!fileInput.files || fileInput.files.length === 0) return;
+        const files = await Api().describeFiles(fileInput.files);
 
-      const ragExts = ["pdf", "txt", "docx", "pptx", "xlsx"];
-      const indexable = files.filter((f) => ragExts.includes(f.ext));
-      const nonIndexable = files.filter((f) => !ragExts.includes(f.ext));
+        const ragExts = ["pdf", "txt", "docx", "pptx", "xlsx"];
+        const indexable = files.filter((f) => ragExts.includes(f.ext));
+        const nonIndexable = files.filter((f) => !ragExts.includes(f.ext));
 
-      if (nonIndexable.length > 0) {
-        addStagedFiles(nonIndexable);
-      }
+        if (nonIndexable.length > 0) {
+          addStagedFiles(nonIndexable);
+        }
 
-      if (indexable.length > 0) {
-        await indexFilesWithProgress(indexable);
-      }
-    });
+        if (indexable.length > 0) {
+          await indexFilesWithProgress(indexable);
+        }
+      });
+    }
 
     // RAG folder upload
     const folderBtn = document.getElementById("upload-folder-btn");
-    folderBtn.addEventListener("click", () => {
-      folderInput.value = "";
-      folderInput.click();
-    });
+    if (folderBtn && folderInput) {
+      folderBtn.addEventListener("click", () => {
+        folderInput.value = "";
+        folderInput.click();
+      });
 
-    folderInput.addEventListener("change", async () => {
-      const result = Api().describeFolder(folderInput.files);
-      if (!result || !result.files || result.files.length === 0) return;
+      folderInput.addEventListener("change", async () => {
+        const result = Api().describeFolder(folderInput.files);
+        if (!result || !result.files || result.files.length === 0) return;
 
-      // Show folder name as a header chip, then index all files
-      const staging = document.getElementById("file-staging");
-      staging.style.display = "flex";
-      const headerChip = document.createElement("div");
-      headerChip.className = "file-chip rag-indexing";
-      const folderIcon = document.createElement("span");
-      folderIcon.className = "file-chip-icon";
-      folderIcon.textContent = "\u{1F4C1}";
-      headerChip.appendChild(folderIcon);
-      const folderName = document.createElement("span");
-      folderName.className = "file-chip-name";
-      folderName.textContent = `${result.folder}/ (${result.files.length} files)`;
-      headerChip.appendChild(folderName);
-      staging.appendChild(headerChip);
+        // Show folder name as a header chip, then index all files
+        const staging = document.getElementById("file-staging");
+        staging.style.display = "flex";
+        const headerChip = document.createElement("div");
+        headerChip.className = "file-chip rag-indexing";
+        const folderIcon = document.createElement("span");
+        folderIcon.className = "file-chip-icon";
+        folderIcon.textContent = "\u{1F4C1}";
+        headerChip.appendChild(folderIcon);
+        const folderName = document.createElement("span");
+        folderName.className = "file-chip-name";
+        folderName.textContent = `${result.folder}/ (${result.files.length} files)`;
+        headerChip.appendChild(folderName);
+        staging.appendChild(headerChip);
 
-      const totalChunks = await indexFilesWithProgress(result.files);
+        const totalChunks = await indexFilesWithProgress(result.files);
 
-      // Update header chip with final result
-      folderName.textContent = `${result.folder}/ (${result.files.length} files, ${totalChunks} chunks)`;
-      headerChip.classList.remove("rag-indexing");
-      headerChip.classList.add("rag-indexed");
+        // Update header chip with final result
+        folderName.textContent = `${result.folder}/ (${result.files.length} files, ${totalChunks} chunks)`;
+        headerChip.classList.remove("rag-indexing");
+        headerChip.classList.add("rag-indexed");
 
-      setTimeout(() => {
-        headerChip.remove();
-        if (staging.children.length === 0) {
-          staging.style.display = "none";
-        }
-      }, 4000);
-    });
+        setTimeout(() => {
+          headerChip.remove();
+          if (staging.children.length === 0) {
+            staging.style.display = "none";
+          }
+        }, 4000);
+      });
+    }
 
     // Logout uses a real <form method="post"> that hits /accounts/logout/
 
