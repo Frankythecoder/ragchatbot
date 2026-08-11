@@ -83,12 +83,12 @@
     }
   }
 
-  async function sendMessage(threadId, message, files = [], mode = "normal") {
+  async function sendMessage(threadId, message, files = []) {
     try {
       const res = await request(`/api/threads/${threadId}/chat/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, files: files || [], mode }),
+        body: JSON.stringify({ message, files: files || [] }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();

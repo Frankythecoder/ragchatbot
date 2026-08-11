@@ -14,7 +14,6 @@
     folderInput;
 
   let stagedFiles = [];
-  let selectedMode = "normal";
 
   // ---- RAG indexing UI ----
 
@@ -478,8 +477,7 @@
       const response = await Api().sendMessage(
         currentThread.id,
         message,
-        filesForBackend,
-        selectedMode
+        filesForBackend
       );
 
       removeThinking();
@@ -575,20 +573,16 @@
       if (!fileInput.files || fileInput.files.length === 0) return;
       const files = await Api().describeFiles(fileInput.files);
 
-      if (selectedMode === "normal") {
-        addStagedFiles(files);
-      } else {
-        const ragExts = ["pdf", "txt", "docx", "pptx", "xlsx"];
-        const indexable = files.filter((f) => ragExts.includes(f.ext));
-        const nonIndexable = files.filter((f) => !ragExts.includes(f.ext));
+      const ragExts = ["pdf", "txt", "docx", "pptx", "xlsx"];
+      const indexable = files.filter((f) => ragExts.includes(f.ext));
+      const nonIndexable = files.filter((f) => !ragExts.includes(f.ext));
 
-        if (nonIndexable.length > 0) {
-          addStagedFiles(nonIndexable);
-        }
+      if (nonIndexable.length > 0) {
+        addStagedFiles(nonIndexable);
+      }
 
-        if (indexable.length > 0) {
-          await indexFilesWithProgress(indexable);
-        }
+      if (indexable.length > 0) {
+        await indexFilesWithProgress(indexable);
       }
     });
 
@@ -631,19 +625,6 @@
           staging.style.display = "none";
         }
       }, 4000);
-    });
-
-    // RAG toggle
-    const ragToggle = document.getElementById("rag-toggle");
-    const modeLabel = document.getElementById("mode-label");
-    ragToggle.addEventListener("change", () => {
-      selectedMode = ragToggle.checked ? "rag" : "normal";
-      modeLabel.textContent = ragToggle.checked ? "RAG" : "Normal";
-      modeLabel.classList.toggle("rag-active", ragToggle.checked);
-      uploadBtn.title = ragToggle.checked
-        ? "Upload documents to RAG knowledge base (PDF, DOCX, PPTX, XLSX, TXT)"
-        : "Attach files to message";
-      folderBtn.style.display = ragToggle.checked ? "" : "none";
     });
 
     // Logout uses a real <form method="post"> that hits /accounts/logout/

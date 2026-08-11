@@ -21,12 +21,11 @@ from .serializers import (
     ChatThreadDetailSerializer,
     MessageSerializer,
 )
-from .llm.normal_llm import build_normal_conversation
 from .llm.title_generator import build_title_conversation
 
 # rag_pipeline pulls in faiss + sentence-transformers + torch (~300-400 MB).
-# Imported lazily inside the RAG-only code paths so the chat UI and Normal
-# mode can boot on Render's 512 MB free tier without OOM-killing the worker.
+# Imported lazily so the chat UI can boot on Render's 512 MB free tier without
+# OOM-killing the worker.
 
 User = get_user_model()
 
@@ -169,9 +168,8 @@ def send_message(request, thread_id):
 
     content = request.data.get("message", "").strip()
     files = request.data.get("files", []) or []
-    mode = request.data.get("mode", "normal")
 
-    if not content and not files:
+    if not content:
         return Response(
             {"detail": "Message cannot be empty."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -187,7 +185,7 @@ def send_message(request, thread_id):
         for f in files
     ]
     Message.objects.create(
-        thread=thread, sender="user", content=content or "[Files attached]",
+        thread=thread, sender="user", content=content,
         attachments=file_meta,
     )
 
@@ -196,49 +194,34 @@ def send_message(request, thread_id):
     user_msg_count = thread.messages.filter(sender="user").count()
     is_first_message = user_msg_count == 1
 
-    # Build conversation history for LLM (token optimization)
-    all_messages = list(thread.messages.order_by("timestamp"))
-    max_msgs = settings.MAX_HISTORY_MESSAGES
-    if len(all_messages) > max_msgs:
-        all_messages = all_messages[-max_msgs:]
-
-    # Build conversation
+    # Build RAG conversation from retrieved chunks
     sources = []
     retrieved_chunks = []
-    if mode == "rag" and content:
-        from .llm.rag_pipeline import retrieve, build_rag_conversation
-        results = retrieve(request.user.id, content)
-        if results:
-            conversation, sources, retrieved_chunks = build_rag_conversation(
-                content, results
-            )
-        else:
-            # No documents indexed at all
-            ai_content = "I don't know. No documents have been uploaded yet."
-            if is_first_message:
-                _autotitle_thread(thread, content, files, ai_content)
-            Message.objects.create(thread=thread, sender="ai", content=ai_content)
-            thread.save()
-            return Response(
-                {
-                    "message": ai_content,
-                    "tokens": None,
-                    "thread_title": thread.title,
-                    "sources": [],
-                    "retrieved_chunks": [],
-                }
-            )
+    from .llm.rag_pipeline import retrieve, build_rag_conversation
+    results = retrieve(request.user.id, content)
+    if results:
+        conversation, sources, retrieved_chunks = build_rag_conversation(
+            content, results
+        )
     else:
-        # Normal mode: standard conversation with history
-        all_messages = list(thread.messages.order_by("timestamp"))
-        max_msgs = settings.MAX_HISTORY_MESSAGES
-        if len(all_messages) > max_msgs:
-            all_messages = all_messages[-max_msgs:]
-        conversation = build_normal_conversation(content, files, all_messages)
+        # No documents indexed at all
+        ai_content = "I don't know. No documents have been uploaded yet."
+        if is_first_message:
+            _autotitle_thread(thread, content, files, ai_content)
+        Message.objects.create(thread=thread, sender="ai", content=ai_content)
+        thread.save()
+        return Response(
+            {
+                "message": ai_content,
+                "tokens": None,
+                "thread_title": thread.title,
+                "sources": [],
+                "retrieved_chunks": [],
+            }
+        )
 
     # Debug: print what we're sending to OpenAI
     print(f"\n{'='*60}")
-    print(f"MODE: {mode}")
     print(f"MESSAGES COUNT: {len(conversation)}")
     for i, msg in enumerate(conversation):
         role = msg["role"]
