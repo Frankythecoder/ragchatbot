@@ -185,7 +185,7 @@ MAX_HISTORY_MESSAGES = int(os.environ.get("MAX_HISTORY_MESSAGES", "20"))
 # Non-superuser accounts are capped at this many chat requests per calendar
 # day (UTC). Superusers are unlimited and are the only accounts that can
 # upload documents to the RAG knowledge base.
-DAILY_MESSAGE_LIMIT = int(os.environ.get("DAILY_MESSAGE_LIMIT", "3"))
+DAILY_MESSAGE_LIMIT = int(os.environ.get("DAILY_MESSAGE_LIMIT", "14"))
 
 # --- RAG ---
 RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "2000"))
