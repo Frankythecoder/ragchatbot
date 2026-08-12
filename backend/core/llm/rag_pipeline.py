@@ -284,6 +284,20 @@ def retrieve(user_id, query, top_k=None):
             results.append((score, idx))
             selected.add(idx)
 
+    # Semantic-only fallback: if the floor filtered too aggressively (typical
+    # for queries whose vocabulary doesn't overlap the corpus — all scores
+    # cluster low so top*0.6 excludes almost everything), still surface the
+    # best semantic matches so the LLM can synthesize from related content
+    # instead of getting no context at all.
+    MIN_RESULTS = min(4, top_k)
+    if len(results) < MIN_RESULTS:
+        for score, idx in scored:
+            if len(results) >= MIN_RESULTS:
+                break
+            if idx not in selected:
+                results.append((score, idx))
+                selected.add(idx)
+
     results.sort(key=lambda x: x[0], reverse=True)
     return [metadata[idx] for _, idx in results]
 
@@ -312,17 +326,21 @@ def build_rag_conversation(content, results):
             "content": (
                 "You are a helpful research assistant. Answer the user's "
                 "question using only the document excerpts provided below. "
-                "The user's question may contain typos or paraphrase the "
-                "document — match by intent, not exact spelling. "
+                "Match by MEANING, not exact wording. The user may use "
+                "different vocabulary, synonyms, or paraphrases than the "
+                "documents — that is expected. If the excerpts discuss the "
+                "same concept, entity, or topic as the question — even "
+                "without using the exact words in the question — answer "
+                "from those excerpts and quote them. "
                 "Include direct quotes in quotation marks, name the document "
                 "each quote came from, then explain in your own words. "
                 "Do not use outside knowledge. "
-                "If the excerpts cover the topic but don't contain the "
-                "specific section or detail the user asked for, answer with "
-                "what the excerpts do say and note what's missing. "
+                "If the excerpts touch on the topic but don't contain the "
+                "specific detail the user asked for, answer with what the "
+                "excerpts do say and note what's missing. "
                 "Respond with \"I don't know. The answer to your question "
-                "was not found in the uploaded documents.\" ONLY when none "
-                "of the excerpts plausibly relate to the question's topic."
+                "was not found in the uploaded documents.\" ONLY when the "
+                "excerpts are clearly about unrelated subjects."
             ),
         },
         {
