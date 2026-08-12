@@ -145,6 +145,23 @@ REST_FRAMEWORK = {
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50 MB
 
+# Route uncaught view exceptions to stdout so Render's free-tier "Logs" view
+# (which only surfaces gunicorn's stdout, not Python's stderr) shows tracebacks.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
+
 # --- Production security flags (auto-enabled when DEBUG is False) ---
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
