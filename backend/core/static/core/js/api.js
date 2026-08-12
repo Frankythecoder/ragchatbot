@@ -84,24 +84,33 @@
   }
 
   async function sendMessage(threadId, message, files = []) {
+    let status = 0;
     try {
       const res = await request(`/api/threads/${threadId}/chat/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, files: files || [] }),
       });
+      status = res.status;
       if (!res.ok) {
         let detail = `HTTP ${res.status}`;
         try {
           const data = await res.json();
           detail = data.detail || detail;
         } catch (_) {}
-        throw new Error(detail);
+        const err = new Error(detail);
+        err.status = res.status;
+        throw err;
       }
-      return await res.json();
+      const data = await res.json();
+      data.ok = true;
+      data.status = status;
+      return data;
     } catch (e) {
       console.error("sendMessage:", e);
       return {
+        ok: false,
+        status: e.status || status,
         message: e.message,
         tokens: null,
         thread_title: null,

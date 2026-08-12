@@ -685,6 +685,11 @@ body.custom-theme .input-footer {
   margin-top: 12px;
 }
 
+.input-footer.daily-limit-reached {
+  color: #e0564e;
+  font-weight: 500;
+}
+
 /* ========== Scroll Down Button ========== */
 .scroll-down-btn {
   position: absolute;

@@ -15,6 +15,31 @@
 
   let stagedFiles = [];
 
+  let dailyMessageCount = Number(window.CORTEX_DAILY_COUNT || 0);
+  const dailyMessageLimit = Number(window.CORTEX_DAILY_LIMIT || 0);
+  const isSuperuser = !!window.CORTEX_IS_SUPERUSER;
+
+  function isDailyLimitReached() {
+    return !isSuperuser && dailyMessageLimit > 0 && dailyMessageCount >= dailyMessageLimit;
+  }
+
+  function dailyLimitMessage() {
+    return `Daily limit of ${dailyMessageLimit} messages reached. Please try again tomorrow.`;
+  }
+
+  function applyDailyLimitLock() {
+    if (!isDailyLimitReached()) return;
+    if (sendButton) {
+      sendButton.disabled = true;
+      sendButton.title = dailyLimitMessage();
+    }
+    const footer = document.querySelector(".input-footer");
+    if (footer) {
+      footer.textContent = dailyLimitMessage();
+      footer.classList.add("daily-limit-reached");
+    }
+  }
+
   // ---- RAG indexing UI ----
 
   async function indexFilesWithProgress(files) {
@@ -398,6 +423,7 @@
 
     messageInput.disabled = false;
     messageInput.value = "";
+    applyDailyLimitLock();
 
     requestAnimationFrame(() => {
       setTimeout(() => {
@@ -414,6 +440,7 @@
     messageInput.disabled = false;
     messageInput.value = "";
     messageInput.style.height = "auto";
+    applyDailyLimitLock();
 
     if (chatSearch) chatSearch.value = "";
     mainContent.classList.add("new-chat-mode");
@@ -428,6 +455,11 @@
   // ---- Send message ----
 
   async function handleSendMessage() {
+    if (isDailyLimitReached()) {
+      applyDailyLimitLock();
+      return;
+    }
+
     const message = messageInput.value.trim();
     if (!message && stagedFiles.length === 0) return;
 
@@ -480,6 +512,12 @@
         filesForBackend
       );
 
+      if (response && response.ok) {
+        dailyMessageCount += 1;
+      } else if (response && response.status === 429) {
+        dailyMessageCount = dailyMessageLimit;
+      }
+
       removeThinking();
 
       // Create bot message with streaming effect
@@ -513,8 +551,12 @@
       appendMessage(false, "Error: Failed to get a response.", false);
     } finally {
       messageInput.disabled = false;
-      sendButton.disabled = false;
       messageInput.focus();
+      if (isDailyLimitReached()) {
+        applyDailyLimitLock();
+      } else {
+        sendButton.disabled = false;
+      }
     }
   }
 
@@ -640,6 +682,7 @@
       await refreshHistorySidebar();
       mainContent.classList.add("new-chat-mode");
       chatContainer.innerHTML = "";
+      applyDailyLimitLock();
     })();
   }
 

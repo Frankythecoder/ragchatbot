@@ -103,9 +103,18 @@ def chat_view(request):
     """Render the single-page chat UI. Session-authenticated; unauthenticated
     visitors are redirected to /accounts/login/ by @login_required.
     """
+    if request.user.is_superuser:
+        daily_count = 0
+    else:
+        daily_count = Message.objects.filter(
+            thread__user=request.user,
+            sender="user",
+            timestamp__date=timezone.now().date(),
+        ).count()
     return render(request, "chat.html", {
         "is_superuser": request.user.is_superuser,
         "daily_message_limit": settings.DAILY_MESSAGE_LIMIT,
+        "daily_message_count": daily_count,
     })
 
 
